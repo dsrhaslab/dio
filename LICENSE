@@ -1,0 +1,52 @@
+The BSD 3-Clause "New" or "Modified" License
+
+Copyright (c) [2022-2023], INESC TEC
+
+DIO is a generic tool for observing and diagnosing applications storage I/O. By combining system call tracing with a customizable data analysis and visualization pipeline, DIO provide non-intrusive and comprehensive I/O diagnosis for applications using in-kernel POSIX storage systems (e.g., ext4, linux block device).
+
+This software is authored by:
+Tânia da Conceição Araújo Esteves
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this
+list of conditions and the following disclaimer in the documentation and/or other
+materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may
+be used to endorse or promote products derived from this software without specific
+prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
+
+This program makes use and is distributed with the following libraries:
+1. go-elasticsearch (https://github.com/elastic/go-elasticsearch)
+2. cleanenv (https://github.com/ilyakaznacheev/cleanenv)
+3. gobpf (https://github.com/iovisor/gobpf)
+4. goInfo (https://github.com/matishsiao/goInfo)
+5. xxHash (https://github.com/pierrec/xxHash)
+6. pflag (https://github.com/spf13/pflag)
+7. toml (https://github.com/BurntSushi/toml)
+8. godotenv (https://github.com/joho/godotenv)
+9. yaml (https://github.com/go-yaml/yaml)
+10. edn (https://github.com/go-edn/edn)
+11. kubeadm-ansible (https://github.com/kairen/kubeadm-ansible)
+
+You can reach INESC TEC at info@inesctec.pt, or
+Campus da Faculdade de Engenharia da Universidade do Porto
+Rua Dr. Roberto Frias
+4200-465 Porto
+Portugal
