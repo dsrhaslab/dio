@@ -1,0 +1,37 @@
+---
+
+- name: Prepare Setup
+  hosts: master
+  gather_facts: no
+  roles:
+    - { role: dio/prepare_setup, tags: ['never', 'prepare_setup'] }
+
+- name: Create PVs
+  hosts: master
+  gather_facts: no
+  roles:
+    - { role: dio/create_pvs, tags: ['never', 'deploy_dio', 'create_pvs'] }
+
+- name: Create DIO pipeline
+  hosts: master
+  gather_facts: no
+  roles:
+    - { role: dio/create_pipeline, tags: ['never', 'deploy_dio', 'create_pipeline'] }
+
+- name: Import Kibana dashboards
+  hosts: master
+  gather_facts: no
+  roles:
+    - { role: dio/import_dashboards, when: "run_all is defined and run_all == 'true'", tags: ['never', 'deploy_dio', 'import_dashboards'] }
+
+- name: Delete DIO pipeline
+  hosts: master
+  gather_facts: no
+  roles:
+    - { role: dio/delete_pipeline, tags: ['never', 'delete_dio', 'delete_pipeline'] }
+
+- name: Delete PVs
+  hosts: master
+  gather_facts: no
+  roles:
+    - { role: dio/delete_pvs, tags: ['never', 'delete_dio', 'delete_pvs'] }

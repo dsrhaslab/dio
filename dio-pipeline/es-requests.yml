@@ -1,0 +1,21 @@
+---
+- hosts: master
+  gather_facts: yes
+  tasks:
+  - name: Get DIO indices
+    shell: curl -u "{{dio_es_user}}:{{dio_es_pass}}" -k -X GET "{{master_ip}}:31111/dio*?pretty"
+    tags: get_indices
+    register: result
+
+  - debug: msg="{{result.stdout}}"
+    tags: get_indices
+
+  - name: Delete DIO indices
+    shell: curl -u "{{dio_es_user}}:{{dio_es_pass}}" -k -X DELETE "{{master_ip}}:31111/dio*?pretty"
+    tags: delete_indices
+    register: result
+
+  - debug: msg="{{result.stdout}}"
+    tags:
+      - get_indices
+      - delete_indices

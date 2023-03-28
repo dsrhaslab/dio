@@ -1,0 +1,50 @@
+---
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: dio-cluster
+  namespace: default
+spec:
+  version: {{ ELK_version }}
+  http:
+    service:
+      spec:
+        type: NodePort
+        ports:
+          - name: http
+            nodePort: 31111
+            port: 9200
+            protocol: TCP
+            targetPort: 9200
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  auth:
+    fileRealm:
+    - secretName: dio-cluster-es-credentials
+  nodeSets:
+  # dedicated master nodes
+  - name: node
+    count: {{ groups['node'] | length }}
+    podTemplate:
+      spec:
+        nodeSelector:
+          workertype_es: "true"
+        containers:
+          - name: elasticsearch
+            env:
+            - name: ES_JAVA_OPTS
+              value: -Xms{{es_mem}}g -Xmx{{es_mem}}g
+            resources:
+              requests:
+                memory: {{es_mem}}Gi
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        storageClassName: dio-storage-class
+        resources:
+          requests:
+            storage: {{pvc_capacity}}Gi

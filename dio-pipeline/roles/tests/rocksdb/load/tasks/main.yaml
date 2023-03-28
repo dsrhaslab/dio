@@ -1,0 +1,75 @@
+
+---
+
+- include_vars: group_vars/kube_cluster.yml
+
+- name: Delete Load Results directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/load"
+    state: absent
+
+- name: Create Load Results directory
+  file:
+    path: "{{ tracing_data_dir }}/load"
+    state: directory
+
+- name: Delete RocksDB directory (if it exists)
+  become: yes
+  file:
+    path: "{{ rocksdb_data_dir }}/rocksdb_data"
+    state: absent
+
+- name: Create RocksDB directory
+  file:
+    path: "{{ rocksdb_data_dir }}/rocksdb_data"
+    state: directory
+
+- name: Running rocksdb (vanilla) [run={{run_number}}]
+  docker_container:
+    name: rocksdb_load
+    image: taniaesteves/rocksdb:v5.17.2
+    state: started
+    recreate: yes
+    detach: false
+    pid_mode: host
+    hostname: ${HOSTNAME}
+    command: load
+    volumes:
+      - "{{ rocksdb_data_dir }}/rocksdb_data/kvstore:/rocksdb/test/kvstore"
+      - "{{ rocksdb_data_dir }}/rocksdb_data/results:/rocksdb/test/results"
+    env:
+      DB_BENCH_OPS: "{{db_bench_ops}}"
+  register: rocksdb_load_container
+
+- assert:
+    that:
+      - "not rocksdb_load_container.failed"
+      - "rocksdb_load_container.container.State.Status == 'exited'"
+
+- name: Save logs
+  shell: docker logs rocksdb_load > "{{ tracing_data_dir }}/load/docker_logs.txt" 2>&1
+
+- name: Copy files from /rocksdb_data/results/ to load_results
+  copy:
+    remote_src: True
+    src: "{{ rocksdb_data_dir }}/rocksdb_data/results/"
+    dest: "{{ tracing_data_dir }}/load"
+
+- shell: (cd "{{ tracing_data_dir }}/load"; find "$PWD"/* -maxdepth 2 -type f)
+  register: files_to_copy
+
+- name: Save results
+  fetch:
+    src: "{{ file_item }}"
+    dest: "final_test_results/rocksdb/load/run_{{run_number}}/"
+    flat: yes
+  with_items: "{{ files_to_copy.stdout_lines }}"
+  loop_control:
+    loop_var: file_item
+
+- name: Copy files from /rocksdb_data/kvstore/ to backup_kvstore
+  copy:
+    remote_src: True
+    src: "{{ rocksdb_data_dir }}/rocksdb_data/kvstore/"
+    dest: "{{ rocksdb_data_dir }}/backup_kvstore"

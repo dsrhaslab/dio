@@ -1,0 +1,10 @@
+---
+
+results_dir: "/home/{{ansible_user}}/dio_tests_res"
+tracing_data_dir: "/mnt/nvme/tracing_data"
+test_data_dir: "{{results_dir}}/data"
+
+# ----
+
+run_number: 0
+suffix: ""

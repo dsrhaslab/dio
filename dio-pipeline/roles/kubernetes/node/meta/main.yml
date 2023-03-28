@@ -1,0 +1,4 @@
+---
+dependencies:
+  - { role: commons/os-checker }
+  - { role: kubernetes/pre-install }

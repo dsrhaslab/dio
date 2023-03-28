@@ -1,0 +1,115 @@
+---
+
+- include_vars: group_vars/kube_cluster.yml
+
+- name: Delete DIO results directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/dio/dio_data"
+    state: absent
+
+- name: Create DIO results directory
+  file:
+    path: "{{ tracing_data_dir }}/dio/dio_data"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Delete RocksDB directory (if it exists)
+  become: yes
+  file:
+    path: "{{ rocksdb_data_dir }}/rocksdb_data"
+    state: absent
+
+- name: Create RocksDB kvstore directory
+  file:
+    path: "{{ rocksdb_data_dir }}/rocksdb_data/kvstore"
+    state: directory
+
+- name: Copy files from backup_kvstore
+  copy:
+    remote_src: True
+    src: "{{ rocksdb_data_dir }}/backup_kvstore/"
+    dest: "{{ rocksdb_data_dir }}/rocksdb_data/kvstore/"
+
+- name: Set target paths
+  set_fact:
+    dio_target_paths: [ "{{ rocksdb_data_dir }}/rocksdb_data/kvstore", "/rocksdb/test/kvstore" ]
+  when: filter_paths|bool == true
+
+- debug:
+    msg: "{{filter_paths}}"
+
+- name: Get hostname
+  shell: uname -n
+  register: target_hostname
+
+- name: Create dio config file
+  template:
+    src: "templates/dio.yml.j2"
+    dest: "{{ rocksdb_dir }}/dio.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+  become: yes
+
+- name: Create docker-compose file
+  template:
+    src: "templates/docker-compose.yaml.j2"
+    dest: "{{ rocksdb_dir }}/dio-docker-compose.yaml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+  become: yes
+
+- name: Start Dstat
+  shell: screen -S "rocksdb_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{ tracing_data_dir }}/dio/dstat.csv"
+
+- name: Pause for 10 secons
+  pause:
+    seconds: 10
+
+- name: Clearing the cache
+  shell: sync; echo 3 > /proc/sys/vm/drop_caches
+  register: caches_clean
+  become: yes
+
+- name: Start RocksDB (with DIO) [run={{run_number}}]
+  shell:
+    cmd: "docker-compose -f {{ rocksdb_dir }}/dio-docker-compose.yaml up"
+  register: compose_result
+
+- name: Pause for 10 secons
+  pause:
+    seconds: 10
+
+- name: Stop dstat
+  shell: screen -XS "rocksdb_DSTAT_{{run_number}}" quit
+  ignore_errors: true
+
+- name: Kill all screen sessions
+  shell: pkill screen
+  ignore_errors: true
+  become: yes
+
+- name: Save logs
+  shell: docker logs tests_rocksdb_dio_rocksdb_1 > "{{ tracing_data_dir }}/dio/docker_logs.txt" 2>&1
+
+- name: Save rocksdb results
+  copy:
+    remote_src: True
+    src: "{{ rocksdb_data_dir }}/rocksdb_data/results/"
+    dest: "{{ tracing_data_dir }}/dio/"
+
+- shell: (cd "{{ tracing_data_dir }}/dio"; find "$PWD"/* -maxdepth 2 -type f)
+  register: files_to_copy
+
+- name: Save results
+  fetch:
+    src: "{{ file_item }}"
+    dest: "final_test_results/rocksdb/{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    flat: yes
+  with_items: "{{ files_to_copy.stdout_lines }}"
+  loop_control:
+    loop_var: file_item

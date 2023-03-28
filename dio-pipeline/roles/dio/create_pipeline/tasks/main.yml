@@ -1,0 +1,45 @@
+---
+
+- name: Create DIO directory
+  become: yes
+  file:
+    path: "{{ kube_dio_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: "Copy DIO YAML files"
+  when: run_all is defined and run_all == 'true'
+  template:
+    src: "{{ item }}"
+    dest: "{{ kube_dio_dir }}/{{ item | basename | regex_replace('\\.j2','') }}"
+  with_fileglob:
+    - ../templates/*.j2
+
+- name: Create secret with Elastic credentials
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ kube_dio_dir }}/elasticCredentials.yml"
+    wait: true
+
+- name: Deploy the Elasticsearch cluster
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ kube_dio_dir }}/elasticsearch.yml"
+    wait: true
+
+- name: Deploy Kibana instance
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ kube_dio_dir }}/kibana.yml"
+    wait: true
+
+- name: Wait for kibana to come up
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    wait: true
+    name: dio-kibana-kb
+    namespace: default
+    wait_sleep: 5
+    wait_timeout: 800
+  register: control_plane_pods_ready

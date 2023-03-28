@@ -1,0 +1,19 @@
+FROM taniaesteves/rocksdb:v5.17.2 as rocksdb_image
+
+FROM taniaesteves/dio-tracer:v1.0.1
+COPY --from=rocksdb_image /rocksdb /rocksdb
+
+ENV ROCKSDB_DIRECTORY=/rocksdb
+ENV DB_BENCH_OPS=100000000
+
+RUN apt-get install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev cmake time strace
+
+WORKDIR /rocksdb
+
+COPY scripts/entrypoint.sh ./start_db_bench.sh
+RUN chmod +x start_db_bench.sh
+
+COPY scripts/truncate_file.sh ./truncate_file.sh
+RUN chmod +x truncate_file.sh
+
+ENTRYPOINT [ "/rocksdb/start_db_bench.sh" ]

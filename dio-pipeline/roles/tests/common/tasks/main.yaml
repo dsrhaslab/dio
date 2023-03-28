@@ -1,0 +1,23 @@
+---
+
+- name: Create dstat directory
+  become: yes
+  file:
+    path: "/usr/share/dstat"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Install dstat script
+  copy:
+    src: files/dstat
+    dest: "/usr/share/dstat/dstat"
+    mode:  0644
+
+- name: Install screen
+  become: yes
+  apt:
+    name: screen
+    state: latest
+    update_cache: yes

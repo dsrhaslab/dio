@@ -1,0 +1,39 @@
+---
+- name: Install python setuptools
+  apt: name="python-setuptools" state=latest update_cache=yes
+
+- name: Install required python packages for DIO
+  pip: name="{{ dio_required_packages  }}"
+  delegate_to: "{{ item }}"
+  loop: "{{ kube_cluster_ips }}"
+  ignore_errors: True
+
+- name: Allow pods on master node
+  command: kubectl taint nodes --all node-role.kubernetes.io/master-
+  ignore_errors: True
+
+- name: Add label to master
+  command: kubectl label nodes {{ master_hostname }} workertype_ki=true --overwrite
+  ignore_errors: True
+
+- name: Add label to workers
+  command: kubectl label nodes {{ main_nodes_ips }} workertype_es=true --overwrite
+  ignore_errors: True
+
+- name: Set vm.max_map_count to 262144
+  ansible.posix.sysctl:
+    name: vm.max_map_count
+    value: '262144'
+    state: present
+    reload: yes
+  delegate_to: "{{ item }}"
+  loop: "{{ kube_cluster_ips }}"
+  become: yes
+
+- name: Create ECK CRDS"
+  command: kubectl create -f https://download.elastic.co/downloads/eck/1.9.1/crds.yaml
+  ignore_errors: True
+
+- name: Apply ECK operator"
+  command: kubectl apply -f https://download.elastic.co/downloads/eck/1.9.1/operator.yaml
+  ignore_errors: True

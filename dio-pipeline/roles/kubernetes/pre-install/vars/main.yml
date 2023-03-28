@@ -1,0 +1,7 @@
+---
+kubernetes_gpg_url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+kubernetes_repo: deb [arch={{ deb_architecture.stdout }}] http://apt.kubernetes.io/ kubernetes-xenial main
+kubernetes_packages:
+  - "kubelet={{ kube_version_pkg }}"
+  - "kubeadm={{ kube_version_pkg }}"
+  - "kubectl={{ kube_version_pkg }}"

@@ -1,0 +1,47 @@
+---
+
+- name: Install aptitude using apt
+  apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
+
+- name: Install required system packages for Docker
+  apt: name={{ docker_required_packages }} state=latest update_cache=yes
+
+- name: Add Docker GPG key
+  apt_key:
+    url: "{{ docker_gpg_url }}"
+    state: present
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "{{ docker_repo }}"
+    filename: "docker"
+    state: present
+    update_cache: yes
+
+- name: Install Docker
+  apt: name={{ docker_packges }} state=latest update_cache=yes
+
+- name: Install Python Docker module
+  pip:
+    name: docker
+
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Checking Cgroup Driver...
+  shell: docker info | grep -i cgroup
+
+- name: Making systemd as Cgroup Driver...
+  copy:
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+  register: RestartDocker
+
+- name: Restarting Docker...
+  service:
+    name: docker
+    state: restarted
+  when: RestartDocker.changed

@@ -1,0 +1,57 @@
+---
+
+
+- name: Create global results directory
+  become: yes
+  file:
+    path: "{{ results_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Create test data directory
+  become: yes
+  file:
+    path: "{{ test_data_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Delete tracing data directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/{{setup}}"
+    state: absent
+
+- name: Create tracing data directory
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/{{setup}}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Create rocksdb results directory
+  file:
+    path: "{{ rocksdb_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+# - name: Delete RocksDB data directory (if it exists)
+#   become: yes
+#   file:
+#     path: "{{ rocksdb_data_dir }}"
+#     state: absent
+
+# - name: Create RocksDB data directory
+#   file:
+#     path: "{{ rocksdb_data_dir }}/rocksdb_data/kvstore"
+#     state: directory
+#     owner: "{{ ansible_user }}"
+#     group: "{{ ansible_user }}"
+#     recurse: yes

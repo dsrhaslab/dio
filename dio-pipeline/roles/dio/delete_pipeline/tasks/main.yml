@@ -1,0 +1,22 @@
+---
+
+- name: Delete Kibana instance
+  kubernetes.core.k8s:
+    state: absent
+    src: "{{ kube_dio_dir }}/kibana.yml"
+    wait: true
+  ignore_errors: true
+
+- name: Delete the Elasticsearch cluster
+  kubernetes.core.k8s:
+    state: absent
+    src: "{{ kube_dio_dir }}/elasticsearch.yml"
+    wait: true
+  ignore_errors: true
+
+- name: Delete secret with Elastic credentials
+  kubernetes.core.k8s:
+    state: absent
+    src: "{{ kube_dio_dir }}/elasticCredentials.yml"
+    wait: true
+  ignore_errors: true

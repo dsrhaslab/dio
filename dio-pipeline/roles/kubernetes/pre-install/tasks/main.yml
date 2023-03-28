@@ -1,0 +1,38 @@
+---
+
+- name: Add Kubernetes APT GPG key
+  apt_key:
+    url: "{{ kubernetes_gpg_url }}"
+    state: present
+
+- name: Add Kubernetes APT repository
+  apt_repository:
+    repo: "{{ kubernetes_repo }}"
+    filename: "kubernetes"
+    state: present
+    update_cache: yes
+
+- name: Install kubernetes packages
+  apt: name={{ kubernetes_packages }} state=present update_cache=yes
+
+- name: Remove swapfile from /etc/fstab
+  mount:
+    name: "{{ item }}"
+    fstype: swap
+    state: absent
+  with_items:
+    - swap
+    - none
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Disable system swap
+  shell: "swapoff -a"
+
+- name: Reload kubelet daemon
+  systemd:
+    name: kubelet
+    daemon_reload: yes
+    enabled: yes

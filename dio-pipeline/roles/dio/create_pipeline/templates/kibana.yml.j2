@@ -1,0 +1,27 @@
+---
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: dio-kibana
+  namespace: default
+spec:
+  version: {{ ELK_version }}
+  podTemplate:
+    spec:
+      nodeSelector:
+        workertype_ki: "true"
+  http:
+    service:
+      spec:
+        type: NodePort
+        ports:
+        - port: 5601
+          targetPort: 5601
+          protocol: TCP
+          nodePort: 32222
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  count: 1
+  elasticsearchRef:
+    name: dio-cluster

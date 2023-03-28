@@ -1,0 +1,45 @@
+tracer:
+  events: {{dio_target_events}}
+  target_paths: {{dio_target_paths}}
+  target_pids: []
+  target_tids: []
+  trace_old_processes: true
+  capture_proc_events: false
+  detailed_data: {{dio_detailed_data}}
+  detail_with_content: "{{dio_detail_with_content}}"
+  detail_with_arg_paths: {{dio_detail_with_arg_paths}}
+  detail_with_sock_addr: {{dio_detail_with_sock_addr}}
+  detail_with_sock_data: {{dio_detail_with_sock_data}}
+  discard_errors: false
+  discard_directories: true
+  maps_strategy: "{{dio_maps_strategy}}"
+  perfmap_size: {{dio_perfmap_size}}
+  show_stats: true
+  stats_path: "/dio_data/dio-stats.json"
+  number_consumers: {{dio_number_consumers}}
+  wait_timeout: {{dio_wait_timeout}}
+  timeout: {{dio_timeout}}
+
+output:
+  nop_writer:
+    enabled: {{dio_nopwriter_enabled}}
+  file_writer:
+    enabled: {{dio_filewriter_enabled}}
+    filename: "/dio_data/dio-trace.json"
+  elasticsearch_writer:
+    enabled: {{dio_eswriter_enabled}}
+    servers: [ {{es_nodes_ips_list | regex_replace('\"', '"') }} ]
+    username: {{dio_es_user}}
+    password: {{dio_es_pass}}
+    flush_bytes: {{dio_es_flush_bytes}}
+    flush_interval: {{dio_es_flush_interval}}
+
+logger:
+  debug_mode: false
+  log2stdout: true
+  log2file: false
+  log_filename: "/dio_data/dio-log.txt"
+  profiling_on: {{dio_prof_on}}
+  profiling_result: "/dio_data/dio-profiling.json"
+  save_timestamps: {{dio_prof_times}}
+  profiling_times_result: "/dio_data/dio-profiling-times.json"

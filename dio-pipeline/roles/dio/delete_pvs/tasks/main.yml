@@ -1,0 +1,25 @@
+---
+- name: Delete local_pvs.yml
+  kubernetes.core.k8s:
+    state: absent
+    src: "{{ kube_dio_dir }}/local_pvs.yml"
+    wait: true
+  ignore_errors: True
+
+- name: Delete /etc/local_sc.yml
+  when: "run_all is defined and run_all == 'true'"
+  kubernetes.core.k8s:
+    state: absent
+    src: "{{ kube_dio_dir }}/local_sc.yml"
+    wait: true
+  ignore_errors: True
+
+- name: Delete pvs directories
+  when: "run_all is defined and run_all == 'true'"
+  become: yes
+  file:
+    path: "{{kube_dio_pv_dir}}/"
+    state: absent
+  loop: "{{ groups['node'] }}"
+  delegate_to: "{{ item }}"
+  ignore_errors: True

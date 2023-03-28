@@ -1,0 +1,28 @@
+---
+
+master_ip: "{% if is_vm %}{{ ansible_host }}{% else %}{{ hostvars[groups['master'][0]]['ansible_default_ipv4'].address | default(groups['master'][0]) }}{% endif %}"
+master_hostname: "{{ hostvars[groups['master'][0]]['inventory_hostname'].address | default(groups['master'][0]) }}"
+main_nodes_ips: "{% set IP_ARR=[] %}{% for host in groups['node'] %}{% if IP_ARR.insert(loop.index,hostvars[host]['inventory_hostname']) %}{% endif %}{% endfor %}{{IP_ARR|join(' ')}}"
+main_nodes_ips_list: "{% set IP_ARR=[] %}{% for host in groups['node'] %}{% if IP_ARR.insert(loop.index,hostvars[host]['inventory_hostname']) %}{% endif %}{% endfor %}{{IP_ARR|join(', ')}}"
+kube_cluster_ips: "{{ groups['kube_cluster'] | map('extract', hostvars, ['ansible_host']) | list }}"
+es_nodes_ips_list: "{%for host in groups['node']%}\"http://{{hostvars[host]['ansible_host']}}:31111\"{% if not loop.last %}, {% endif %}{% endfor %}"
+
+kibana_ip: "{{ ( hostvars[groups['kibana'][0]]['ansible_default_ipv4'].address | default(groups['master'][0]) ) }}"
+kibana_addr: "http://{{kibana_ip}}:32222"
+
+nodes_group: "groups['{{kube_nodes}}']"
+nodes_length: "{{ nodes_group | length }}"
+
+is_vm: false
+run_all: false
+
+pv_capacity: 30
+pvc_capacity: 30
+es_mem: 2
+
+kube_dio_dir: /etc/kubernetes/dio
+kube_dio_pv_dir: "/mnt/nvme/.dio-data"
+dio_es_user: "dio"
+dio_es_pass: "diopw"
+
+ELK_version: 8.5.2

@@ -1,0 +1,44 @@
+FROM taniaesteves/dio-tracer:v1.0.1
+
+ENV DIO_SESSION_NAME "fluentbit-v2.0.5"
+
+WORKDIR /
+
+RUN apt-get update -y && \
+    apt-get install -y linux-headers-generic && \
+    apt-get install -y software-properties-common && \
+    apt-get install -y wget python3 python3-pip git && \
+    apt-get install -y automake autoconf libtool bison flex
+
+RUN apt-get install -y pkg-config
+
+RUN apt-get install -y tcl-dev libssl-dev libyaml-dev
+
+RUN apt-get install -y strace time
+
+RUN git clone https://github.com/fluent/fluent-bit.git
+WORKDIR /fluent-bit
+
+RUN git checkout ba2c0d70ab5fb32a10e7b920e0ea821b7fb9b259 && \
+    cd build && \
+    cmake .. && \
+    make
+
+COPY config/fluentbit.conf ./fluentbit.conf
+COPY config/dio-flb.yaml /usr/share/dio/conf/config.yaml
+
+COPY src/client-app.c ./client-app.c
+RUN gcc client-app.c -o app
+
+COPY scripts/start_fb.sh ./start_fb.sh
+RUN chmod +x start_fb.sh
+
+COPY scripts/start_dio.sh ./start_dio.sh
+RUN chmod +x start_dio.sh
+
+COPY scripts/entrypoint.sh ./entrypoint.sh
+RUN chmod +x entrypoint.sh
+
+RUN mkdir -p /dio_data
+
+ENTRYPOINT [ "/fluent-bit/entrypoint.sh" ]

@@ -1,0 +1,23 @@
+version: '2.4'
+services:
+  strace_rocksdb:
+      image: taniaesteves/rocksdb:v5.17.2
+      pid: host
+      hostname: {{ target_hostname.stdout }}
+      privileged: true
+      mem_limit: 1024m
+      blkio_config:
+        device_write_bps:
+          - path: /dev/sda
+            rate: 200mb
+      command: strace ycsbwa
+      volumes:
+        - /lib/modules:/lib/modules:ro
+        - /usr/src:/usr/src:ro
+        - /sys/kernel/debug/:/sys/kernel/debug/:ro
+        - {{ tracing_data_dir }}/strace/strace_data:/strace_data
+        - {{ rocksdb_data_dir }}/rocksdb_data/kvstore:/rocksdb/test/kvstore
+        - {{ rocksdb_data_dir }}/rocksdb_data/results:/rocksdb/test/results
+      environment:
+        - DB_BENCH_OPS={{db_bench_ops}}
+      stop_grace_period: 2m

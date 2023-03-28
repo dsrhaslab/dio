@@ -1,0 +1,33 @@
+# https://github.com/openebs/cstor-operators/blob/develop/docs/quick.md
+{% for h in groups['node'] %}
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: dio-pv-{{loop.index0}}
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: {{pv_capacity}}Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: dio-storage-class
+  local:
+    # the folder has to be created before applying this yaml
+    path: {{kube_dio_pv_dir}}/vol-{{loop.index0}}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - {{hostvars[h].inventory_hostname}}
+  claimRef:
+    # we want that the first pod/es-node is always on this node
+    # the pattern is: elasticsearch-data-CLUSTERNAME-es-NODESETNAME-PODNUMBER
+    name: elasticsearch-data-dio-cluster-es-node-{{loop.index0}}
+    namespace: default
+{% endfor %}

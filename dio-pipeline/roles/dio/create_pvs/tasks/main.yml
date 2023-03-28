@@ -1,0 +1,43 @@
+---
+
+- name: Create pv directories
+  become: yes
+  file:
+    path: "{{kube_dio_pv_dir}}/vol-{{ index }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  loop: "{{ groups['node'] }}"
+  delegate_to: "{{ item }}"
+  loop_control:
+    index_var: index
+
+- name: Create DIO directory
+  become: yes
+  file:
+    path: "{{ kube_dio_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Create the local storage class configuration file (local_sc.yml)
+  when: run_all is defined and run_all == 'true'
+  template:
+    src: "templates/localStorageClass.yml.j2"
+    dest: "{{ kube_dio_dir }}/local_sc.yml"
+
+- name: Apply local_sc.yml manifest to the cluster.
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ kube_dio_dir }}/local_sc.yml"
+
+- name: Create the persistent volumes configuration file (local_pvs.yml)
+  when: run_all is defined and run_all == 'true'
+  template:
+    src: "templates/localPersistentVolumes.yml.j2"
+    dest: "{{ kube_dio_dir }}/local_pvs.yml"
+
+- name: Apply local_pvs.yml manifest to the cluster.
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ kube_dio_dir }}/local_pvs.yml"

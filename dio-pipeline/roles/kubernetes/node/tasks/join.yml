@@ -1,0 +1,16 @@
+---
+
+- name: Reset Kubernetes component
+  shell: "kubeadm reset --force"
+  register: reset_cluster
+
+
+- name: Copy the join command to server location
+  copy: src=join-command dest=/tmp/join-command.sh mode=0777
+
+- name: Join the node to Kubernetes cluster
+  when: reset_cluster is succeeded
+  command: sh /tmp/join-command.sh
+  register: join_cluster
+  notify:
+    - Recreate kube-dns
