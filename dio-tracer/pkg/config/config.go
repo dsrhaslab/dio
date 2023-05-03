@@ -42,6 +42,8 @@ type NopWriterConf struct {
 type FileWriterConf struct {
 	Enabled  bool   `yaml:"enabled"   env:"DIO_OUTPUT_FILE_ON"    env-description:"Save events to file"`
 	Filename string `yaml:"filename"  env:"DIO_OUTPUT_FILENAME"   env-description:"Output filename"`
+	Bulk     bool   `yaml:"bulk"      env:"DIO_OUTPUT_FILE_BULK"  env-description:"Bulk write"`
+	BulkSize int    `yaml:"bulk_size" env:"DIO_OUTPUT_FILE_BSIZE" env-description:"Bulk size"`
 }
 type ElasticsearchWriterConf struct {
 	Enabled       bool     `yaml:"enabled"         env:"DIO_OUTPUT_ES_ENABLED"   env-description:"Send events to Elasticsearch"`

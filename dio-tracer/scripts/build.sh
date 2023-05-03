@@ -1,7 +1,7 @@
 #!/bin/bash
 
-TAG="v1.0.1"
-IMAGE="taniaesteves/dio-tracer"
+TAG=${TAG:-"v1.0.2"}
+IMAGE=${IMAGE:-"taniaesteves/dio-tracer"}
 IMAGE_NAME="${IMAGE}:${TAG}"
 
 function go_build {

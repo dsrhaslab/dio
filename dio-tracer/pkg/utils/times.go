@@ -2,35 +2,46 @@ package utils
 
 import (
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
 
-var bootTime *int64
+var bootTime *time.Time
 
 func ComputeBootTime() {
 	bootTime = getBootTime()
 }
 
-func getBootTime() *int64 {
+func getBootTime() *time.Time {
 	//Get system boot time
-	out, err := exec.Command("stat", "-c", "%Z", "/proc/").Output()
+
+	out, err := exec.Command("uptime", "-s").Output()
 	if err != nil {
 		ErrorLogger.Fatalf("Failed to execute command 'uptime -s': %s", err)
 	}
+	lastBootTime := strings.TrimSpace(string(out))
+	lastBootTime = strings.TrimPrefix(lastBootTime, "system boot")
+	lastBootTime = strings.TrimSpace(lastBootTime)
 
-	out2 := strings.TrimSuffix(string(out), "\n")
-	n, _ := strconv.ParseInt(out2, 10, 64)
-	return &n
+	out, err = exec.Command("date", "+%Z").Output()
+	if err != nil {
+		ErrorLogger.Fatalf("Failed to execute command 'date +%%Z': %s", err)
+	}
+	timezone := strings.TrimSpace(string(out))
+
+	bootTime, err := time.Parse(`2006-01-02 15:04:05MST`, lastBootTime+timezone)
+	if err != nil {
+		ErrorLogger.Fatalf("Failed to parse bootTime: %s", err)
+	}
+
+	return &bootTime
 }
 
 func Epoch2dateTime(ts uint64) time.Time {
 	if bootTime == nil {
 		bootTime = getBootTime()
 	}
-
-	return time.Unix(*bootTime, int64(ts))
+	return bootTime.Add(time.Duration(ts) * time.Nanosecond)
 }
 
 func Nanosecond2Time(ts uint64) time.Time {
@@ -41,8 +52,7 @@ func Epoch2dateTimeSeconds(ts_seconds uint64) time.Time {
 	if bootTime == nil {
 		bootTime = getBootTime()
 	}
-
-	return time.Unix(*bootTime+int64(ts_seconds), 0)
+	return bootTime.Add(time.Duration(ts_seconds) * time.Second) // TODO: validate this
 }
 
 func DateTime2String(time_t time.Time) string {
