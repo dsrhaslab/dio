@@ -1,0 +1,60 @@
+---
+
+- include_vars: group_vars/kube_cluster.yml
+
+- name: Start Dstat
+  shell: screen -S "FILEBENCH_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{tracing_data_dir}}/strace/dstat.csv"
+
+- name: Pause for 10 secons
+  pause:
+    seconds: 10
+
+- name: Running filebench (strace) [run={{run_number}}]
+  docker_container:
+    name: strace_filebench
+    image: taniaesteves/filebench_strace:latest
+    state: started
+    recreate: yes
+    detach: false
+    pid_mode: host
+    hostname: ${HOSTNAME}
+    privileged: true
+    capabilities:
+      - SYS_PTRACE
+    volumes:
+      - "{{ filebench_data_dir }}:/tmp/filebench"
+      - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
+  register: strace_container
+
+- name: Pause for 10 secons
+  pause:
+    seconds: 10
+
+- name: Stop dstat
+  shell: screen -X -S "FILEBENCH_DSTAT_{{run_number}}" quit
+  ignore_errors: true
+
+- name: Kill all screen sessions
+  shell: pkill screen
+  ignore_errors: true
+  become: yes
+
+- assert:
+    that:
+      - "not strace_container.failed"
+      - "strace_container.container.State.Status == 'exited'"
+
+- name: Save logs
+  shell: docker logs -n 100 strace_filebench > "{{tracing_data_dir}}/strace/docker_logs.txt" 2>&1
+
+- shell: (cd "{{tracing_data_dir}}/strace"; find "$PWD"/* -maxdepth 2 -type f)
+  register: files_to_copy
+
+- name: Save results
+  fetch:
+    src: "{{ file_item }}"
+    dest: "final_test_results/filebench/{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    flat: yes
+  with_items: "{{ files_to_copy.stdout_lines }}"
+  loop_control:
+    loop_var: file_item

@@ -1,0 +1,4 @@
+---
+dependencies:
+  - { role: tests/common }
+  - { role: tests/filebench/setup_env, setup: vanilla }

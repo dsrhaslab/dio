@@ -1,6 +1,7 @@
 ---
 - name: Install python setuptools
   apt: name="python-setuptools" state=latest update_cache=yes
+  become: yes
 
 - name: Install required python packages for DIO
   pip: name="{{ dio_required_packages  }}"
