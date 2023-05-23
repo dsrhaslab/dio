@@ -77,7 +77,7 @@
 - name: Save results
   fetch:
     src: "{{ file_item }}"
-    dest: "final_test_results/rocksdb/{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    dest: "final_test_results/rocksdb/{{prefix}}{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
     flat: yes
   with_items: "{{ files_to_copy.stdout_lines }}"
   loop_control:

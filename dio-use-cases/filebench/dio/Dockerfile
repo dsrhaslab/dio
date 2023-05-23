@@ -29,6 +29,9 @@ RUN chmod +x entrypoint.sh
 
 RUN mkdir -p /dio_data
 
+ENV STRACE_OPTIONS="-yy -s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
+
+
 ENTRYPOINT [ "/filebench/entrypoint.sh" ]
 
 # ENTRYPOINT ["/usr/share/dio/bin/dio", "--"]

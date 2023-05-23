@@ -11,8 +11,8 @@ services:
         - /boot:/host/boot:ro
         - /lib/modules:/host/lib/modules:ro
         - /usr:/host/usr:ro
-        - {{ tracing_data_dir }}/sysdig/sysdig_data:/home
-      command: sysdig container.name="tests_rocksdb_vanilla_rocksdb_1" and "evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','close')" and fd.name contains "kvstore" -s 1 -w /home/sysdig_trace.scap
+        - "{{ tracing_data_dir }}/sysdig/sysdig_data:/home"
+      command: sysdig "evt.type in ('read', 'pread', 'readv', 'write', 'pwrite', 'writev')" and evt.dir='<' and not evt.buffer exists -c topscalls -r /home/sysdig_trace.scap
       environment:
         - SYSDIG_BPF_PROBE=
       stop_grace_period: 2m

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 LOGS_DIR="final_test_results/ansible_logs"
-
+HOSTS="hosts.ini"
 mkdir -p $LOGS_DIR
 
 STARTING_RUN=1
@@ -11,14 +11,14 @@ RUNS=3
 
 function reset_kube_cluster {
     # destroy previous dio pipeline
-    ansible-playbook -u gsd -i hosts.ini dio_playbook.yml --tags delete_dio -e run_all=true
+    ansible-playbook -u gsd -i $HOSTS dio_playbook.yml --tags delete_dio -e run_all=true
 
-    ansible-playbook -u gsd -i hosts.ini reset-site.yaml
+    ansible-playbook -u gsd -i $HOSTS reset-site.yaml
 
     if [ $? -eq 0 ]; then
         echo OK
     else
-        ansible-playbook -u gsd -i hosts.ini reset-site.yaml
+        ansible-playbook -u gsd -i $HOSTS reset-site.yaml
         if [ $? -eq 0 ]; then
             echo OK
         else
@@ -35,41 +35,41 @@ function setup_kube_cluster {
     reset_kube_cluster
 
     # create kubernetes cluster
-    ansible-playbook -u gsd -i hosts.ini playbook.yml
+    ansible-playbook -u gsd -i $HOSTS playbook.yml
 
     # prepare setup
-    ansible-playbook -u gsd -i hosts.ini dio_playbook.yml --tags prepare_setup
+    ansible-playbook -u gsd -i $HOSTS dio_playbook.yml --tags prepare_setup
 
     # create new dio pipeline
-    ansible-playbook -u gsd -i hosts.ini dio_playbook.yml --tags deploy_dio -e run_all=true
+    ansible-playbook -u gsd -i $HOSTS dio_playbook.yml --tags deploy_dio -e run_all=true
 }
 
 function mount_dio_pipeline {
 
     # destroy previous dio pipeline
-    ansible-playbook -u gsd -i hosts.ini dio_playbook.yml --tags delete_dio -e run_all=true
+    ansible-playbook -u gsd -i $HOSTS dio_playbook.yml --tags delete_dio -e run_all=true
 
     # create new dio pipeline
-    ansible-playbook -u gsd -i hosts.ini dio_playbook.yml --tags deploy_dio -e run_all=true
+    ansible-playbook -u gsd -i $HOSTS dio_playbook.yml --tags deploy_dio -e run_all=true
 }
 
 # --------
 
 function rocksdb () {
     reset_kube_cluster
-    ansible-playbook -u gsd -i hosts.ini rocksdb_dio_playbook.yml --tags load | tee "$LOGS_DIR/rocksdb_load_"$i".txt" ;
+    ansible-playbook -u gsd -i $HOSTS rocksdb_dio_playbook.yml --tags load | tee "$LOGS_DIR/rocksdb_load_"$i".txt" ;
 
     for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
         reset_kube_cluster
 
-        ansible-playbook -u gsd -i hosts.ini rocksdb_dio_playbook.yml --tags vanilla -e run_number="$i" | tee "$LOGS_DIR/rocksdb_vanilla_"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS rocksdb_dio_playbook.yml --tags vanilla -e run_number="$i" -e prefix="$TEST_NR" | tee "$LOGS_DIR/rocksdb_vanilla_"$i".txt" ;
 
-        ansible-playbook -u gsd -i hosts.ini rocksdb_dio_playbook.yml --tags sysdig -e run_number="$i" | tee "$LOGS_DIR/rocksdb_sysdig_"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS rocksdb_dio_playbook.yml --tags sysdig -e run_number="$i" -e prefix="$TEST_NR" | tee "$LOGS_DIR/rocksdb_sysdig_"$i".txt" ;
 
-        ansible-playbook -u gsd -i hosts.ini rocksdb_dio_playbook.yml --tags strace -e run_number="$i" | tee "$LOGS_DIR/rocksdb_strace_"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS rocksdb_dio_playbook.yml --tags strace -e run_number="$i" -e prefix="$TEST_NR" | tee "$LOGS_DIR/rocksdb_strace_"$i".txt" ;
 
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini rocksdb_dio_playbook.yml --tags dio -e run_number="$i" | tee "$LOGS_DIR/rocksdb_dio_"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS rocksdb_dio_playbook.yml --tags dio -e run_number="$i" -e prefix="$TEST_NR" | tee "$LOGS_DIR/rocksdb_dio_"$i".txt" ;
     done
 
 }
@@ -89,11 +89,69 @@ function help () {
     echo "  - dio_rate_limit, runs dio rate limit experiments (for rates 12500, 15000, 17500, 20000, 22500, 25000, 50000, 100000)"
 }
 
+function micro_rw {
+    mkdir -p $LOGS_DIR
 
-function vanilla {
+    TEST_NR="t01-"
+    echo "$(date) | $TEST_NR Starting DIO RW experiments" >> $LOGS_DIR/filebench-tests.log
+    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
 
-    # reset kubernetes cluster
-    reset_kube_cluster
+        # ---- VANILLA
+        echo "$(date) | Filebench - Vanilla - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags vanilla -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"vanilla-"$i".txt";
+
+        # ---- SYSDIG
+        echo "$(date) | Filebench - Sysdig (detailedPall) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags sysdig_detailedPall -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"sysdig-detailedPall-"$i".txt";
+
+        echo "$(date) | Filebench - Sysdig (detailedPallCplain) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags sysdig_detailedPallCplain -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"sysdig-detailedPallCplain-"$i".txt";
+
+        # ---- STRACE
+        echo "$(date) | Filebench - Strace (raw) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags strace_raw -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-raw-"$i".txt";
+
+        echo "$(date) | Filebench - Strace (detailedPargs) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags strace_detailedPargs -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPargs-"$i".txt";
+
+        echo "$(date) | Filebench - Strace (detailedPall) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags strace_detailedPall -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPall-"$i".txt";
+
+        echo "$(date) | Filebench - Strace (detailedPallCplain) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags strace_detailedPallCplain -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPallCplain-"$i".txt";
+
+        # ---- DIO - ELK
+        echo "$(date) | Filebench - DIO (raw) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_raw -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-raw-"$i".txt";
+
+        echo "$(date) | Filebench - DIO (detailedPfds) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPfds -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPfds-"$i".txt";
+
+        echo "$(date) | Filebench - DIO (detailedPall) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-"$i".txt";
+
+        echo "$(date) | Filebench - DIO (detailedPallCuhash) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPallCuhash -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPallCuhash-"$i".txt";
+
+        echo "$(date) | Filebench - DIO (detailedPallCkhash) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPallCkhash -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPallCkhash-"$i".txt";
+    done
+}
+
+function micro_vanilla_dio_rt {
+    mkdir -p $LOGS_DIR
     FILEBENCH_RATE_LIMITE=$1
     FILEBENCH_EVENT_GEN_RATE=$2
 
@@ -102,378 +160,216 @@ function vanilla {
         sufix="_rate_limited_"$FILEBENCH_EVENT_GEN_RATE
     fi
 
+    TEST_NR="t02-"
+    echo "$(date) | $TEST_NR Starting DIO RT experiments" >> $LOGS_DIR/filebench-tests.log
     for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        echo "Filebench - Vanilla - Run $i"
-        ansible-playbook -u gsd filebench_playbook.yml  --tags vanilla -e run_number="$i" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee "$LOGS_DIR/t00_vanilla_$i$sufix.txt" ;
+
+        # ---- Vanilla
+        echo "$(date) | Filebench - RT $FILEBENCH_EVENT_GEN_RATE - Vanilla - Run $i" >> $LOGS_DIR/filebench-tests.log
+        reset_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml  --tags vanilla -e run_number="$i" -e prefix="$TEST_NR" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee $LOGS_DIR"/"$TEST_NR"vanilla$sufix-"$i".txt" ;
+
+        echo "$(date) | Filebench - RT $FILEBENCH_EVENT_GEN_RATE - DIO (raw) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_raw -e run_number="$i" -e prefix="$TEST_NR" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee $LOGS_DIR"/"$TEST_NR"dio-elk-raw$sufix-"$i".txt" ;
+
+        echo "$(date) | Filebench - RT $FILEBENCH_EVENT_GEN_RATE - DIO (detailedPfds) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPfds -e run_number="$i" -e prefix="$TEST_NR" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPfds$sufix-"$i".txt" ;
+
+        echo "$(date) | Filebench - RT $FILEBENCH_EVENT_GEN_RATE - DIO (detailedPall) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall -e run_number="$i" -e prefix="$TEST_NR" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall$sufix-"$i".txt" ;
+
+        echo "$(date) | Filebench - RT $FILEBENCH_EVENT_GEN_RATE - DIO (detailedPallCuhash) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPallCuhash -e run_number="$i" -e prefix="$TEST_NR" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPallCuhash$sufix-"$i".txt" ;
+
+        echo "$(date) | Filebench - RT $FILEBENCH_EVENT_GEN_RATE - DIO (raw) - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPallCkhash -e run_number="$i" -e prefix="$TEST_NR" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPallCkhash$sufix-"$i".txt" ;
+
     done
 }
 
-function strace {
-    # reset kubernetes cluster
+function micro_rt {
+    dio_rate_limit "true"  25000
+    dio_rate_limit "true"  30000
+    dio_rate_limit "true"  35000
+    dio_rate_limit "true"  40000
+    dio_rate_limit "true"  45000
+    dio_rate_limit "true"  50000
+    dio_rate_limit "true" 100000
+}
+
+function micro_dio_storage_backends {
+    mkdir -p $LOGS_DIR
     reset_kube_cluster
 
+    TEST_NR="t03-"
+    echo "$(date) | $TEST_NR Starting DIO Storage backends experiments" >> $LOGS_DIR/filebench-tests.log
     for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        echo "Filebench - Strace - Run $i"
-        ansible-playbook -u gsd filebench_playbook.yml  --tags strace -e run_number="$i" | tee "$LOGS_DIR/strace_$i.txt" ;
+
+        # ---- raw
+
+        echo "$(date) | Filebench - DIO - Raw - FILE - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_file_raw -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-file-raw-"$i".txt";
+
+        echo "$(date) | Filebench - DIO - Raw - NOP - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_nop_raw -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-nop-raw-"$i".txt";
+
+        # ---- detailedPfds
+
+        echo "$(date) | Filebench - DIO - detailedPfds - FILE - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_file_detailedPfds -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-file-detailedPfds-"$i".txt";
+
+        echo "$(date) | Filebench - DIO - detailedPfdsPfds - NOP - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_nop_detailedPfds -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-nop-detailedPfds-"$i".txt";
+
+        # ---- detailedPall
+
+        echo "$(date) | Filebench - DIO - detailedPall - FILE - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_file_detailedPall -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-file-detailedPall-"$i".txt";
+
+        echo "$(date) | Filebench - DIO - detailedPall - NOP - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_nop_detailedPall -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-nop-detailedPall-"$i".txt";
+
+        # ---- detailedPallCuhash
+
+        echo "$(date) | Filebench - DIO - detailedPallCuhash - FILE - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_file_detailedPallCuhash -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-file-detailedPallCuhash-"$i".txt";
+
+        echo "$(date) | Filebench - DIO - detailedPallCuhash - NOP - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_nop_detailedPallCuhash -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-nop-detailedPallCuhash-"$i".txt";
+
+        # ---- detailedPallCkhash
+
+        echo "$(date) | Filebench - DIO - detailedPallCkhash - FILE - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_file_detailedPallCkhash -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-file-detailedPallCkhash-"$i".txt";
+
+        echo "$(date) | Filebench - DIO - detailedPallCkhash - NOP - Run $i" >> $LOGS_DIR/filebench-tests.log
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_nop_detailedPallCkhash -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-nop-detailedPallCkhash-"$i".txt";
     done
 }
 
-function dio_raw {
-    mkdir -p $LOGS_DIR
-    FILEBENCH_RATE_LIMITE=$1
-    FILEBENCH_EVENT_GEN_RATE=$2
-
-    sufix=""
-    if [ "$FILEBENCH_RATE_LIMITE" == "true" ]; then
-        sufix="-ratelim"$FILEBENCH_EVENT_GEN_RATE
-    fi
-
-    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        reset_kube_cluster
-
-        # NOP
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_raw -e run_number="$i" | tee "$LOGS_DIR/t03_dio-nop-raw$sufix-"$i".txt" ;
-
-        # FILE
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_raw -e run_number="$i" | tee "$LOGS_DIR/t03_dio-file-raw$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_raw -e run_number="$i" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee "$LOGS_DIR/t03_dio-elk-raw$sufix-"$i".txt" ;
-    done
-}
-
-function dio_detailed {
-    mkdir -p $LOGS_DIR
-    FILEBENCH_RATE_LIMITE=$1
-    FILEBENCH_EVENT_GEN_RATE=$2
-
-    sufix=""
-    if [ "$FILEBENCH_RATE_LIMITE" == "true" ]; then
-        sufix="-ratelim"$FILEBENCH_EVENT_GEN_RATE
-    fi
-
-    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        reset_kube_cluster
-
-        # NOP
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed -e run_number="$i" | tee "$LOGS_DIR/t04_dio-nop-detailed$sufix-"$i".txt" ;
-
-        # FILE
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed -e run_number="$i" | tee "$LOGS_DIR/t04_dio-file-detailed$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed -e run_number="$i" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee "$LOGS_DIR/t04_dio-elk-detailed$sufix-"$i".txt" ;
-    done
-}
-
-function dio_detailed_paths {
-    mkdir -p $LOGS_DIR
-    FILEBENCH_RATE_LIMITE=$1
-    FILEBENCH_EVENT_GEN_RATE=$2
-
-    sufix=""
-    if [ "$FILEBENCH_RATE_LIMITE" == "true" ]; then
-        sufix="-ratelim"$FILEBENCH_EVENT_GEN_RATE
-    fi
-
-    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        reset_kube_cluster
-
-        # NOP
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed-paths -e run_number="$i" | tee "$LOGS_DIR/t05_dio-nop-detailed-paths$sufix-"$i".txt" ;
-
-        # FILE
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed-paths -e run_number="$i" | tee "$LOGS_DIR/t05_dio-file-detailed-paths$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed-paths -e run_number="$i" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee "$LOGS_DIR/t05_dio-elk-detailed-paths$sufix-"$i".txt" ;
-    done
-}
-
-function dio_detailed_paths_uhash {
-    mkdir -p $LOGS_DIR
-    FILEBENCH_RATE_LIMITE=$1
-    FILEBENCH_EVENT_GEN_RATE=$2
-
-    sufix=""
-    if [ "$FILEBENCH_RATE_LIMITE" == "true" ]; then
-        sufix="-ratelim"$FILEBENCH_EVENT_GEN_RATE
-    fi
-
-    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        reset_kube_cluster
-
-        # NOP
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed-paths-uhash -e run_number="$i" | tee "$LOGS_DIR/t06_dio-nop-detailed-paths-uhash$sufix-"$i".txt" ;
-
-        # FILE
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed-paths-uhash -e run_number="$i" | tee "$LOGS_DIR/t06_dio-file-detailed-paths-uhash$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed-paths-uhash -e run_number="$i" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee "$LOGS_DIR/t06_dio-elk-detailed-paths-uhash$sufix-"$i".txt" ;
-    done
-}
-
-
-function dio_detailed_paths_khash {
-    mkdir -p $LOGS_DIR
-    FILEBENCH_RATE_LIMITE=$1
-    FILEBENCH_EVENT_GEN_RATE=$2
-
-    sufix=""
-    if [ "$FILEBENCH_RATE_LIMITE" == "true" ]; then
-        sufix="-ratelim"$FILEBENCH_EVENT_GEN_RATE
-    fi
-
-    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        reset_kube_cluster
-
-        # NOP
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed-paths-khash -e run_number="$i" | tee "$LOGS_DIR/t07_dio-nop-detailed-paths-khash$sufix-"$i".txt" ;
-
-        # FILE
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed-paths-khash -e run_number="$i" | tee "$LOGS_DIR/t07_dio-file-detailed-paths-khash$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed-paths-khash -e run_number="$i" -e filebench_rate_limit=$FILEBENCH_RATE_LIMITE -e filebench_event_rate=$FILEBENCH_EVENT_GEN_RATE | tee "$LOGS_DIR/t07_dio-elk-detailed-paths-khash$sufix-"$i".txt" ;
-    done
-}
-
-
-function micro {
-    mkdir -p $LOGS_DIR
-    FILEBENCH_RATE_LIMITE=$1
-    FILEBENCH_EVENT_GEN_RATE=$2
-
-    sufix=""
-    if [ "$FILEBENCH_RATE_LIMITE" == "true" ]; then
-        sufix="-ratelim"$FILEBENCH_EVENT_GEN_RATE
-    fi
-
-    for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-
-        # ---- T0 - VANILLA
-        reset_kube_cluster
-        ansible-playbook -u gsd filebench_playbook.yml  --tags vanilla -e run_number="$i" | tee "$LOGS_DIR/t00-vanilla-$i$sufix.txt" ;
-
-        # # ---- T1 - STRACE
-        # reset_kube_cluster
-        # ansible-playbook -u gsd filebench_playbook.yml  --tags strace -e run_number="$i" | tee "$LOGS_DIR/t01-strace-$i$sufix.txt" ;
-
-        # # ---- T2 - SYSDIG
-
-        # ---- T3 - RAW
-        # NOP
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_raw -e run_number="$i" | tee "$LOGS_DIR/t03-dio-nop-raw$sufix-"$i".txt" ;
-
-        # FILE
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_raw -e run_number="$i" | tee "$LOGS_DIR/t03-dio-file-raw$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_raw -e run_number="$i" | tee "$LOGS_DIR/t03-dio-elk-raw$sufix-"$i".txt" ;
-
-        # ---- T4 - DETAILED
-        # NOP
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed -e run_number="$i" | tee "$LOGS_DIR/t04-dio-nop-detailed$sufix-"$i".txt" ;
-
-        # FILE
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed -e run_number="$i" | tee "$LOGS_DIR/t04-dio-file-detailed$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed -e run_number="$i" | tee "$LOGS_DIR/t04-dio-elk-detailed$sufix-"$i".txt" ;
-
-
-        # ---- T5 - DETAILED-PATHS
-        # NOP
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths -e run_number="$i" | tee "$LOGS_DIR/t05-dio-nop-detailed-paths$sufix-"$i".txt" ;
-
-        # FILE
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths -e run_number="$i" | tee "$LOGS_DIR/t05-dio-file-detailed-paths$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths -e run_number="$i" | tee "$LOGS_DIR/t05-dio-elk-detailed-paths$sufix-"$i".txt" ;
-
-
-        # ---- T6 - DETAILED-PATHS-UHASH
-        # NOP
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_uhash -e run_number="$i" | tee "$LOGS_DIR/t06-dio-nop-detailed-paths-uhash$sufix-"$i".txt" ;
-
-        # FILE
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_uhash -e run_number="$i" | tee "$LOGS_DIR/t06-dio-file-detailed-paths-uhash$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_uhash -e run_number="$i" | tee "$LOGS_DIR/t06-dio-elk-detailed-paths-uhash$sufix-"$i".txt" ;
-
-
-        # ---- T7 - DETAILED-PATHS-KHASH
-        # NOP
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_khash -e run_number="$i" | tee "$LOGS_DIR/t07-dio-nop-detailed-paths-khash$sufix-"$i".txt" ;
-
-        # FILE
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_khash -e run_number="$i" | tee "$LOGS_DIR/t07-dio-file-detailed-paths-khash$sufix-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_khash -e run_number="$i" | tee "$LOGS_DIR/t07-dio-elk-detailed-paths-khash$sufix-"$i".txt" ;
-
-
-    done
-}
-
-function filters {
+function micro_filters {
     mkdir -p $LOGS_DIR
 
+    TEST_NR="t04-"
+    echo "$(date) | $TEST_NR Starting Filters experiments (strace, sysdig, DIO)" >> $LOGS_DIR/filebench-tests.log
     for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        # ---- T8 - DETAILED-PATHS-FILTER-TID
-        echo "Filebench - DIO - filter tid - Run $i"
 
-        # NOP
+        # ---- TID FILTER
+        # Strace
+        echo "$(date) | Filebench - Strace (detailedPall) - tid filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_filter_tid -e run_number="$i" | tee "$LOGS_DIR/t07_dio-nop-detailed-paths-filter-tid-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags strace_detailedPall_tid_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPall-tid-filter-"$i".txt" ;
 
-        # FILE
+        # Sysdig
+        echo "$(date) | Filebench - Sysdig (detailedPall) - tid filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_filter_tid -e run_number="$i" | tee "$LOGS_DIR/t07_dio-file-detailed-paths-filter-tid-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags sysdig_detailedPall_tid_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"sysdig-detailedPall-tid-filter-"$i".txt" ;
 
-        # ELK
+        # DIO
+        echo "$(date) | Filebench - DIO (detailedPall) - tid filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_filter_tid -e run_number="$i" | tee "$LOGS_DIR/t07_dio-elk-detailed-paths-filter-tid-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_tid_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-tid-filter-"$i".txt" ;
 
-        # ---- T9 - DETAILED-PATHS-FILTER-ORWC
-        echo "Filebench - DIO - filter orwc - Run $i"
 
-        # NOP
+        # ---- ORWC FILTER
+        # Strace
+        echo "$(date) | Filebench - Strace (detailedPall) - orwc filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_filter_orwc -e run_number="$i" | tee "$LOGS_DIR/t08_dio-nop-detailed-paths-filter-orwc-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags strace_detailedPall_orwc_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPall-orwc-filter-"$i".txt" ;
 
-        # FILE
+        # Sysdig
+        echo "$(date) | Filebench - Sysdig (detailedPall) - orwc filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_filter_orwc -e run_number="$i" | tee "$LOGS_DIR/t08_dio-file-detailed-paths-filter-orwc-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags sysdig_detailedPall_orwc_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"sysdig-detailedPall-orwc-filter-"$i".txt" ;
 
-        # ELK
+        # DIO
+        echo "$(date) | Filebench - DIO (detailedPall) - orwc filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_filter_orwc -e run_number="$i" | tee "$LOGS_DIR/t08_dio-elk-detailed-paths-filter-orwc-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_orwc_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-orwc-filter-"$i".txt" ;
 
-        # ---- T10 - DETAILED-PATHS-FILTER-READ
-        echo "Filebench - DIO - filter read - Run $i"
 
-        # NOP
+        # ---- READ FILTER
+        # Strace
+        echo "$(date) | Filebench - Strace (detailedPall) - read filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_filter_read -e run_number="$i" | tee "$LOGS_DIR/t09_dio-nop-detailed-paths-filter-read-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags strace_detailedPall_read_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPall-read-filter-"$i".txt" ;
 
-        # FILE
+        # Sysdig
+        echo "$(date) | Filebench - Sysdig (detailedPall) - read filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_filter_read -e run_number="$i" | tee "$LOGS_DIR/t09_dio-file-detailed-paths-filter-read-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags sysdig_detailedPall_read_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"sysdig-detailedPall-read-filter-"$i".txt" ;
 
-        # ELK
+        # DIO
+        echo "$(date) | Filebench - DIO (detailedPall) - read filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_filter_read -e run_number="$i" | tee "$LOGS_DIR/t09_dio-elk-detailed-paths-filter-read-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_read_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-read-filter-"$i".txt" ;
 
-        # ---- T11 - DETAILED-PATHS-FILTER-STAT
-        echo "Filebench - DIO - filter stat - Run $i"
 
-        # NOP
+        # ---- PASSIVE FILTER
+        # Strace
+        echo "$(date) | Filebench - Strace (detailedPall) - passive filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_filter_stat -e run_number="$i" | tee "$LOGS_DIR/t10_dio-nop-detailed-paths-filter-stat-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags strace_detailedPall_passive_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"strace-detailedPall-passive-filter-"$i".txt" ;
 
-        # FILE
+        # Sysdig
+        echo "$(date) | Filebench - Sysdig (detailedPall) - passive filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_filter_stat -e run_number="$i" | tee "$LOGS_DIR/t10_dio-file-detailed-paths-filter-stat-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags sysdig_detailedPall_passive_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"sysdig-detailedPall-passive-filter-"$i".txt" ;
 
-        # ELK
+        # DIO
+        echo "$(date) | Filebench - DIO (detailedPall) - passive filter - Run $i" >> $LOGS_DIR/filebench-tests.log
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_filter_stat -e run_number="$i" | tee "$LOGS_DIR/t10_dio-elk-detailed-paths-filter-stat-"$i".txt" ;
-
-        # ---- T12 - DETAILED-PATHS-FILTER-RENAMEAT2
-        echo "Filebench - DIO - filter rename - Run $i"
-
-        # NOP
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_nop_detailed_paths_filter_renameat2 -e run_number="$i" | tee "$LOGS_DIR/t11_dio-nop-detailed-paths-filter-renameat2-"$i".txt" ;
-
-        # FILE
-        reset_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_file_detailed_paths_filter_renameat2 -e run_number="$i" | tee "$LOGS_DIR/t11_dio-file-detailed-paths-filter-renameat2-"$i".txt" ;
-
-        # ELK
-        setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_filter_renameat2 -e run_number="$i" | tee "$LOGS_DIR/t11_dio-elk-detailed-paths-filter-renameat2-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_passive_filter -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-passive-filter-"$i".txt" ;
     done
 }
 
-
-function ringbuf {
+function micro_dio_ringbuf {
     mkdir -p $LOGS_DIR
 
+    TEST_NR="t05-"
+    echo "$(date) | $TEST_NR Starting RB experiments" >> $LOGS_DIR/filebench-tests.log
     for ((i=$STARTING_RUN; i <= $RUNS; i++)); do
-        # # ---- T13 - DETAILED-PATHS-RB1KB
-        # echo "Filebench - DIO - RB 1KB - Run $i"
-
-        # # ELK
-        # setup_kube_cluster
-        # ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb1kb -e run_number="$i" | tee "$LOGS_DIR/t13_dio-elk-detailed-paths-rb1kb-"$i".txt" ;
-
-        # # ---- T14 - DETAILED-PATHS-RB16KB
-        # echo "Filebench - DIO - RB 16KB - Run $i"
-
-        # # ELK
-        # setup_kube_cluster
-        # ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb16kb -e run_number="$i" | tee "$LOGS_DIR/t14_dio-elk-detailed-paths-rb16kb-"$i".txt" ;
-
-        # # ---- T15 - DETAILED-PATHS-RB32KB
-        # echo "Filebench - DIO - RB 32KB - Run $i"
-
-        # # ELK
-        # setup_kube_cluster
-        # ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb32kb -e run_number="$i" | tee "$LOGS_DIR/t15_dio-elk-detailed-paths-rb32kb-"$i".txt" ;
-
-        # # ---- T16 - DETAILED-PATHS-RB64KB
-        # echo "Filebench - DIO - RB 64KB - Run $i"
-
-        # # ELK
-        # setup_kube_cluster
-        # ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb64kb -e run_number="$i" | tee "$LOGS_DIR/t16_dio-elk-detailed-paths-rb64kb-"$i".txt" ;
-
-        # # ---- T17 - DETAILED-PATHS-RB128KB
-        # echo "Filebench - DIO - RB 128KB - Run $i"
-
-        # # ELK
-        # setup_kube_cluster
-        # ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb128kb -e run_number="$i" | tee "$LOGS_DIR/t17_dio-elk-detailed-paths-rb128kb-"$i".txt" ;
-
-        # ---- T18 - DETAILED-PATHS-RB256KB
-        echo "Filebench - DIO - RB 256KB - Run $i"
-
-        # ELK
+        # ---- RB 1KB
+        echo "$(date) | Filebench - DIO - RB 1KB - Run $i" >> $LOGS_DIR/filebench-tests.log
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb256kb -e run_number="$i" | tee "$LOGS_DIR/t18_dio-elk-detailed-paths-rb256kb-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb1kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb1kb-"$i".txt" ;
 
-        # ---- T19 - DETAILED-PATHS-RB512KB
-        echo "Filebench - DIO - RB 512KB - Run $i"
-
-        # ELK
+        # ---- RB 16KB
+        echo "$(date) | Filebench - DIO - RB 16KB - Run $i" >> $LOGS_DIR/filebench-tests.log
         setup_kube_cluster
-        ansible-playbook -u gsd -i hosts.ini filebench_playbook.yml --tags dio_elk_detailed_paths_rb512kb -e run_number="$i" | tee "$LOGS_DIR/t19_dio-elk-detailed-paths-rb512kb-"$i".txt" ;
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb16kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb16kb-"$i".txt" ;
+
+        # ---- RB 32KB
+        echo "$(date) | Filebench - DIO - RB 32KB - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb32kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb32kb-"$i".txt" ;
+
+        # ---- RB 64KB
+        echo "$(date) | Filebench - DIO - RB 64KB - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb64kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb64kb-"$i".txt" ;
+
+        # ---- RB 128KB
+        echo "$(date) | Filebench - DIO - RB 128KB - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb128kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb128kb-"$i".txt" ;
+
+        # ---- RB 256KB
+        echo "$(date) | Filebench - DIO - RB 256KB - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb256kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb256kb-"$i".txt" ;
+
+        # ---- RB 512KB
+        echo "$(date) | Filebench - DIO - RB 512KB - Run $i" >> $LOGS_DIR/filebench-tests.log
+        setup_kube_cluster
+        ansible-playbook -u gsd -i $HOSTS filebench_playbook.yml --tags dio_elk_detailedPall_rb512kb -e run_number="$i" -e prefix="$TEST_NR" | tee $LOGS_DIR"/"$TEST_NR"dio-elk-detailedPall-rb512kb-"$i".txt" ;
     done
 }
+
 
 "$@"

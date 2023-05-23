@@ -2,10 +2,14 @@
 
 - include_vars: group_vars/kube_cluster.yml
 
+- name: Get hostname
+  shell: uname -n
+  register: target_hostname
+
 - name: Start Dstat
   shell: screen -S "FILEBENCH_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{ tracing_data_dir }}/vanilla/dstat.csv"
 
-- name: Pause for 10 secons
+- name: Pause for 10 seconds
   pause:
     seconds: 10
 
@@ -18,14 +22,14 @@
     recreate: yes
     detach: false
     pid_mode: host
-    hostname: ${HOSTNAME}
+    hostname: "{{target_hostname.stdout}}"
     privileged: true
     volumes:
       - "{{ filebench_data_dir }}:/tmp/filebench"
       - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
   register: vanilla_container
 
-- name: Pause for 10 secons
+- name: Pause for 10 seconds
   pause:
     seconds: 10
 
@@ -52,7 +56,7 @@
 - name: Save results
   fetch:
     src: "{{ file_item }}"
-    dest: "final_test_results/filebench/{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    dest: "final_test_results/filebench/{{prefix}}{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
     flat: yes
   with_items: "{{ files_to_copy.stdout_lines }}"
   loop_control:

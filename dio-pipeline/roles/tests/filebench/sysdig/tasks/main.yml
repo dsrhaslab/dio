@@ -1,0 +1,186 @@
+---
+
+- include_vars: group_vars/kube_cluster.yml
+
+- name: Delete sysdig results directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/sysdig/sysdig_data"
+    state: absent
+
+- name: Create sysdig results directory
+  file:
+    path: "{{ tracing_data_dir }}/sysdig/sysdig_data"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Get hostname
+  shell: uname -n
+  register: target_hostname
+
+- name: Create docker-compose files for sysdig
+  template:
+    src: "{{ item }}"
+    dest: "{{ filebench_dir }}/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  with_fileglob:
+    - templates/*.j2
+
+- name: Start Dstat
+  shell: screen -S "FILEBENCH_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{ tracing_data_dir }}/vanilla/dstat.csv"
+
+- name: Pause for 10 seconds
+  pause:
+    seconds: 10
+
+
+- name: Start Sysdig [run={{run_number}}]
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-docker-compose.yaml up -d"
+  register: sysdigcompose_result
+
+- name: Pause for 120 seconds
+  pause:
+    seconds: 120
+
+- name: Running filebench (with sysdig) [run={{run_number}}]
+  docker_container:
+    name: vanilla_filebench
+    image: taniaesteves/filebench_dio:v1.0.0
+    state: started
+    recreate: yes
+    detach: false
+    pid_mode: host
+    network_mode: host
+    hostname: "{{target_hostname.stdout}}"
+    privileged: true
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug/:/sys/kernel/debug/:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - "{{ filebench_data_dir }}:/tmp/filebench"
+      - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
+    command: ""
+  register: vanilla_container
+
+- name: Pause for 120 seconds
+  pause:
+    seconds: 120
+
+- name: Stop sysdig
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-docker-compose.yaml down"
+
+- name: Pause for 10 seconds
+  pause:
+    seconds: 10
+
+- name: Stop dstat
+  shell: screen -X -S "FILEBENCH_DSTAT_{{run_number}}" quit
+  ignore_errors: true
+
+- name: Kill all screen sessions
+  shell: killall screen
+  ignore_errors: true
+  become: yes
+
+- name: Kill all screen sessions
+  shell: pkill screen
+  ignore_errors: true
+  become: yes
+
+- assert:
+    that:
+      - "not vanilla_container.failed"
+      - "vanilla_container.container.State.Status == 'exited'"
+
+- name: Save logs
+  shell: docker logs vanilla_filebench > "{{ tracing_data_dir }}/sysdig/docker_logs.txt" 2>&1
+
+- shell: ls -lah {{ tracing_data_dir }}/sysdig/sysdig_data/sysdig_trace.scap
+  become: yes
+  ignore_errors: true
+  register: trace_ls_size
+
+- debug:
+    msg: "{{trace_ls_size.stdout}}"
+  ignore_errors: true
+
+- shell: echo "{{trace_ls_size.stdout}}" > "{{tracing_data_dir}}/sysdig/trace-size.txt"
+  ignore_errors: true
+
+# ----
+- name: Get total events
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-parse-get-events.yaml up"
+  register: sysdigcompose_result
+
+- name: Save logs (Get total events)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/total_scalls.txt" 2>&1
+
+# ----
+- name: Get total entry events
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-parse-get-events-entry.yaml up"
+  register: sysdigcompose_result
+
+- name: Save logs (Get total entry events)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/total_scalls_entry.txt" 2>&1
+
+# ----
+- name: Get total entry events without fd.name
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-parse-get-events-entry-nopath.yaml up"
+  register: sysdigcompose_result
+
+- name: Save logs (Get total entry events without fd.name)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/total_scalls_entry_nopath.txt" 2>&1
+
+# ----
+- name: Get total exit open events
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-parse-get-open-events-entry.yaml up"
+  register: sysdigcompose_result
+
+- name: Save logs (Get total exit open events)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/total_scalls_exit_opens.txt" 2>&1
+
+# ----
+- name: Get total exit open events without fd.name
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-parse-get-open-events-entry-nopath.yaml up"
+  register: sysdigcompose_result
+
+- name: Save logs (Get total exit open events without fd.name)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/total_scalls_exit_opens_nopath.txt" 2>&1
+
+# ----
+- name: Get total exit data events without data
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-parse-get-data-events-exit-incomplete.yaml up"
+  register: sysdigcompose_result
+
+- name: Save logs (Get total exit data events without data)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/total_scalls_data_incomplete.txt" 2>&1
+
+
+- shell: rm {{ tracing_data_dir }}/sysdig/sysdig_data/sysdig_trace.scap
+  become: yes
+  ignore_errors: true
+
+- shell: (cd "{{ tracing_data_dir }}/sysdig"; find "$PWD"/* -maxdepth 2 -type f)
+  register: files_to_copy
+
+- name: Save results
+  fetch:
+    src: "{{ file_item }}"
+    dest: "final_test_results/filebench/{{prefix}}{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    flat: yes
+  with_items: "{{ files_to_copy.stdout_lines }}"
+  loop_control:
+    loop_var: file_item

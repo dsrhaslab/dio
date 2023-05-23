@@ -10,7 +10,9 @@
   tags:
     - always
 
-# -------- VANILLA
+# --------------- T1 - Base - RW (Vanilla, strace, sysdig, DIO)
+
+# ------ Vanilla
 
 - name: Vanilla
   hosts: test
@@ -18,32 +20,74 @@
   become: no
   roles:
     - { role: tests/filebench/vanilla, when: caches_clean, tags: ['never','vanilla'],
-        setup_res_dir: "t00_vanilla"
+        setup_res_dir: "vanilla"
       }
 
-# -------- STRACE
+# ------ STRACE
 
-- name: Strace
+- name: Strace (raw)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace'],
-        setup_res_dir: "t01_strace"
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_raw'],
+        setup_res_dir: "strace_raw",
+        strace_options: "-s 0 -e raw=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
       }
 
-# # -------- SYSDIG
+- name: Strace (detailedPargs)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPargs'],
+        setup_res_dir: "strace_detailedPargs",
+        strace_options: "-s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
+      }
 
-# - name: Sysdig
-#   hosts: test
-#   gather_facts: no
-#   become: no
-#   roles:
-#     - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig'],
-#         setup_res_dir: "t02_sysdig"
-#       }
+- name: Strace (detailedPall)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall'],
+        setup_res_dir: "strace_detailedPall",
+        strace_options: "-yy -s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
+      }
 
-# -------- ELK
+- name: Strace (detailedPallCplain)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPallCplain'],
+        setup_res_dir: "strace_detailedPallCplain",
+        strace_options: "-yy -s 4096 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
+      }
+
+# ------ SYSDIG
+
+- name: Sysdig (detailedPall)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPall'],
+        setup_res_dir: "sysdig_detailedPall",
+        sysdig_command: "sysdig container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1 -w /home/sysdig_trace.scap"
+      }
+
+- name: Sysdig (detailedPallCplain)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPallCplain'],
+        setup_res_dir: "sysdig_detailedPallCplain",
+        sysdig_command: "sysdig container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 4096 -w /home/sysdig_trace.scap"
+      }
+
+# ------ DIO ELK
 
 - name: DIO (ELK - raw)
   hosts: test
@@ -51,7 +95,7 @@
   become: no
   roles:
     - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_raw'],
-        setup_res_dir: "t03-dio-elk-raw",
+        setup_res_dir: "dio-elk-raw",
         dio_eswriter_enabled: true,
         dio_filewriter_enabled: false,
         dio_target_events: ["storage"],
@@ -61,13 +105,13 @@
         dio_detailed_data: false
       }
 
-- name: DIO (ELK - detailed)
+- name: DIO (ELK - detailedPfds)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed'],
-        setup_res_dir: "t04-dio-elk-detailed",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPfds'],
+        setup_res_dir: "dio-elk-detailedPfds",
         dio_eswriter_enabled: true,
         dio_filewriter_enabled: false,
         dio_target_events: ["storage"],
@@ -81,14 +125,13 @@
         dio_detail_with_sock_data: false,
       }
 
-
-- name: DIO (ELK - detailed_paths)
+- name: DIO (ELK - detailedPall)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths'],
-        setup_res_dir: "t05-dio-elk-detailed-paths",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall'],
+        setup_res_dir: "dio-elk-detailedPall",
         dio_eswriter_enabled: true,
         dio_filewriter_enabled: false,
         dio_target_events: ["storage"],
@@ -102,13 +145,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (ELK - detailed_paths_uhash)
+- name: DIO (ELK - detailedPallCuhash)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_uhash'],
-        setup_res_dir: "t06-dio-elk-detailed-paths-uhash",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPallCuhash'],
+        setup_res_dir: "dio-elk-detailedPallCuhash",
         dio_eswriter_enabled: true,
         dio_filewriter_enabled: false,
         dio_target_events: ["storage"],
@@ -122,13 +165,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (ELK - detailed_paths_khash)
+- name: DIO (ELK - detailedPallCkhash)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_khash'],
-        setup_res_dir: "t07-dio-elk-detailed-paths-khash",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPallCkhash'],
+        setup_res_dir: "dio-elk-detailedPallCkhash",
         dio_eswriter_enabled: true,
         dio_filewriter_enabled: false,
         dio_target_events: ["storage"],
@@ -143,7 +186,10 @@
       }
 
 
-# -------- FILE
+
+# --------------- T2 - DIO Storage backends (file, nop)
+
+# ------ DIO File
 
 - name: DIO (File - raw)
   hosts: test
@@ -151,7 +197,7 @@
   become: no
   roles:
     - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_raw'],
-        setup_res_dir: "t03-dio-file-raw",
+        setup_res_dir: "dio-file-raw",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: true,
         dio_filewriter_bulk: true,
@@ -163,13 +209,13 @@
         dio_detailed_data: false
       }
 
-- name: DIO (File - detailed)
+- name: DIO (File - detailedPfds)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed'],
-        setup_res_dir: "t04-dio-file-detailed",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailedPfds'],
+        setup_res_dir: "dio-file-detailedPfds",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: true,
         dio_filewriter_bulk: true,
@@ -185,13 +231,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (File - detailed_paths)
+- name: DIO (File - detailedPall)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths'],
-        setup_res_dir: "t05-dio-file-detailed-paths",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailedPall'],
+        setup_res_dir: "dio-file-detailedPall",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: true,
         dio_filewriter_bulk: true,
@@ -207,13 +253,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (File - detailed_paths_uhash)
+- name: DIO (File - detailedPallCuhash)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_uhash'],
-        setup_res_dir: "t06-dio-file-detailed-paths_uhash",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailedPallCuhash'],
+        setup_res_dir: "dio-file-detailedPallCuhash",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: true,
         dio_filewriter_bulk: true,
@@ -229,13 +275,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (File - detailed_paths_khash)
+- name: DIO (File - detailedPallCkhash)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_khash'],
-        setup_res_dir: "t07-dio-file-detailed-paths-khash",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailedPallCkhash'],
+        setup_res_dir: "dio-file-detailedPallCkhash",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: true,
         dio_filewriter_bulk: true,
@@ -251,15 +297,15 @@
         dio_detail_with_sock_data: false,
       }
 
-# -------- NOP
+# ------ DIO Nop
 
-- name: DIO (NOP - raw)
+- name: DIO (NOP - raw2
   hosts: test
   gather_facts: no
   become: no
   roles:
     - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_raw'],
-        setup_res_dir: "t03-dio-nop-raw",
+        setup_res_dir: "dio-nop-raw",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_nopwriter_enabled: true,
@@ -270,13 +316,13 @@
         dio_detailed_data: false
       }
 
-- name: DIO (NOP - detailed)
+- name: DIO (NOP - detailedPfds2
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed'],
-        setup_res_dir: "t04-dio-nop-detailed",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailedPfds'],
+        setup_res_dir: "dio-nop-detailedPfds",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_nopwriter_enabled: true,
@@ -291,13 +337,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (NOP - detailed_paths)
+- name: DIO (NOP - detailedPall2
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths'],
-        setup_res_dir: "t05-dio-nop-detailed-paths",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailedPall'],
+        setup_res_dir: "dio-nop-detailedPall",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_nopwriter_enabled: true,
@@ -312,13 +358,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (NOP - detailed_paths_uhash)
+- name: DIO (NOP - detailedPallCuhash2
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_uhash'],
-        setup_res_dir: "t06-dio-nop-detailed-paths-uhash",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailedPallCuhash'],
+        setup_res_dir: "dio-nop-detailedPallCuhash",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_nopwriter_enabled: true,
@@ -333,13 +379,13 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (NOP - detailed_paths_khash)
+- name: DIO (NOP - detailedPallCkhash)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_khash'],
-        setup_res_dir: "t07-dio-nop-detailed-paths-khash",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailedPallCkhash'],
+        setup_res_dir: "dio-nop-detailedPallCkhash",
         dio_eswriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_nopwriter_enabled: true,
@@ -356,252 +402,28 @@
 
 
 
-# --------------- FILTERS
+# --------------- T3 - FILTERS (tid, orwc, read, passive) - (strace, sysdig, DIO)
 
-# ------FILTERS NOP
+# ------ FILTERS BY TID
 
-- name: DIO (NOP - detailed_paths_filter_tid)
+# - name: Strace (with paths - TID filter)
+#   hosts: test
+#   gather_facts: no
+#   become: no
+#   roles:
+#     - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall_tid_filter'],
+#         setup_res_dir: "strace-detailedPall-tid-filter",
+#         strace_options: "-yy -s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
+#       }
+
+
+- name: DIO (ELK - detailedPall - TID filter)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_filter_tid'],
-        setup_res_dir: "t08-dio-nop-detailed_paths-filter-tid",
-        dio_nopwriter_enabled: true,
-        dio_filewriter_enabled: false,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["storage"],
-        filter_tid: true,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (NOP - detailed_paths_filter_orwc)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_filter_orwc'],
-        setup_res_dir: "t09-dio-nop-detailed-paths-filter-orwc",
-        dio_nopwriter_enabled: true,
-        dio_filewriter_enabled: false,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["open","openat","read","pread64","readv","write","pwrite64","writev","close"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (NOP - detailed_paths_filter_read)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_filter_read'],
-        setup_res_dir: "t10-dio-nop-detailed-paths-filter-read",
-        dio_nopwriter_enabled: true,
-        dio_filewriter_enabled: false,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["read"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (NOP - detailed_paths_filter_stat)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_filter_stat'],
-        setup_res_dir: "t11-dio-nop-detailed-paths-filter-stat",
-        dio_nopwriter_enabled: true,
-        dio_filewriter_enabled: false,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["stat"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (NOP - detailed_paths_filter_renameat2)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_nop_detailed_paths_filter_renameat2'],
-        setup_res_dir: "t12-dio-nop-detailed-paths-filter-renameat2",
-        dio_nopwriter_enabled: true,
-        dio_filewriter_enabled: false,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["renameat2"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-# ------FILTERS FILE
-
-- name: DIO (FILE - detailed_paths_filter_tid)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_filter_tid'],
-        setup_res_dir: "t08-dio-file-detailed_paths-filter-tid",
-        dio_nopwriter_enabled: false,
-        dio_filewriter_enabled: true,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["storage"],
-        filter_tid: true,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (FILE - detailed_paths_filter_orwc)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_filter_orwc'],
-        setup_res_dir: "t09-dio-file-detailed-paths-filter-orwc",
-        dio_nopwriter_enabled: false,
-        dio_filewriter_enabled: true,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["open","openat","read","pread64","readv","write","pwrite64","writev","close"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (FILE - detailed_paths_filter_read)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_filter_read'],
-        setup_res_dir: "t10-dio-file-detailed-paths-filter-read",
-        dio_nopwriter_enabled: false,
-        dio_filewriter_enabled: true,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["read"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (FILE - detailed_paths_filter_stat)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_filter_stat'],
-        setup_res_dir: "t11-dio-file-detailed-paths-filter-stat",
-        dio_nopwriter_enabled: false,
-        dio_filewriter_enabled: true,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["stat"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-- name: DIO (FILE - detailed_paths_filter_renameat2)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_detailed_paths_filter_renameat2'],
-        setup_res_dir: "t12-dio-file-detailed-paths-filter-renameat2",
-        dio_nopwriter_enabled: false,
-        dio_filewriter_enabled: true,
-        dio_eswriter_enabled: false,
-        dio_target_events: ["renameat2"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
-
-
-# ------FILTERS ELK
-
-- name: DIO (ELK - detailed_paths_filter_tid)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_filter_tid'],
-        setup_res_dir: "t08-dio-elk-detailed_paths-filter-tid",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_tid_filter'],
+        setup_res_dir: "dio-elk-detailedPall-tid-filter",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -618,13 +440,16 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (ELK - detailed_paths_filter_orwc)
+
+# ------ FILTERS BY ORWC
+
+- name: DIO (ELK - detailedPall - ORWC filter)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_filter_orwc'],
-        setup_res_dir: "t09-dio-elk-detailed-paths-filter-orwc",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_orwc_filter'],
+        setup_res_dir: "dio-elk-detailedPall-orwc-filter",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -641,13 +466,15 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (ELK - detailed_paths_filter_read)
+# ------ FILTERS BY READ
+
+- name: DIO (ELK - detailedPall - READ filter)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_filter_read'],
-        setup_res_dir: "t10-dio-elk-detailed-paths-filter-read",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_read_filter'],
+        setup_res_dir: "dio-elk-detailedPall-read-filter",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -664,36 +491,15 @@
         dio_detail_with_sock_data: false,
       }
 
-- name: DIO (ELK - detailed_paths_filter_stat)
-  hosts: test
-  gather_facts: no
-  become: no
-  roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_filter_stat'],
-        setup_res_dir: "t11-dio-elk-detailed-paths-filter-stat",
-        dio_nopwriter_enabled: false,
-        dio_filewriter_enabled: false,
-        dio_eswriter_enabled: true,
-        dio_target_events: ["stat"],
-        filter_tid: false,
-        dio_wait_timeout: -1,
-        dio_timeout: 1500,
-        dio_prof_on: true,
-        dio_prof_times: false,
-        dio_detailed_data: true,
-        dio_detail_with_content: "off",
-        dio_detail_with_arg_paths: true,
-        dio_detail_with_sock_addr: false,
-        dio_detail_with_sock_data: false,
-      }
+# ------ FILTERS BY RENAME (PASSIVE)
 
-- name: DIO (ELK - detailed_paths_filter_renameat2)
+- name: DIO (ELK - detailedPall - PASSIVE filter)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_filter_renameat2'],
-        setup_res_dir: "t12-dio-elk-detailed-paths-filter-renameat2",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_passive_filter'],
+        setup_res_dir: "dio-elk-detailedPall-passive-filter",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -710,15 +516,17 @@
         dio_detail_with_sock_data: false,
       }
 
-# -------
 
-- name: DIO (ELK - detailed_paths_rb1kb)
+
+# --------------- T4 - Ring Buffer sizes (1, 16, 32, 64, 128, 256, 512)
+
+- name: DIO (ELK - detailedPall - rb1kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb1kb'],
-        setup_res_dir: "t13-dio-elk-detailed-paths-rb1kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb1kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb1kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -734,13 +542,13 @@
         dio_perfmap_size: 1024
       }
 
-- name: DIO (ELK - detailed_paths_rb16kb)
+- name: DIO (ELK - detailedPall - rb16kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb16kb'],
-        setup_res_dir: "t14-dio-elk-detailed-paths-rb16kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb16kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb16kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -756,14 +564,13 @@
         dio_perfmap_size: 16384
       }
 
-
-- name: DIO (ELK - detailed_paths_rb32kb)
+- name: DIO (ELK - detailedPall - rb32kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb32kb'],
-        setup_res_dir: "t15-dio-elk-detailed-paths-rb32kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb32kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb32kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -779,13 +586,13 @@
         dio_perfmap_size: 32768
       }
 
-- name: DIO (ELK - detailed_paths_rb64kb)
+- name: DIO (ELK - detailedPall - rb64kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb64kb'],
-        setup_res_dir: "t16-dio-elk-detailed-paths-rb64kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb64kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb64kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -801,13 +608,13 @@
         dio_perfmap_size: 65536
       }
 
-- name: DIO (ELK - detailed_paths_rb128kb)
+- name: DIO (ELK - detailedPall - rb128kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb128kb'],
-        setup_res_dir: "t17-dio-elk-detailed-paths-rb128kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb128kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb128kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -823,13 +630,13 @@
         dio_perfmap_size: 131072
       }
 
-- name: DIO (ELK - detailed_paths_rb256kb)
+- name: DIO (ELK - detailedPall - rb256kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb256kb'],
-        setup_res_dir: "t18-dio-elk-detailed-paths-rb256kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb256kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb256kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,
@@ -845,13 +652,13 @@
         dio_perfmap_size: 262144
       }
 
-- name: DIO (ELK - detailed_paths_rb512kb)
+- name: DIO (ELK - detailedPall - rb512kb)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailed_paths_rb512kb'],
-        setup_res_dir: "t19-dio-elk-detailed-paths-rb512kb",
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_elk_detailedPall_rb512kb'],
+        setup_res_dir: "dio-elk-detailedPall-rb512kb",
         dio_nopwriter_enabled: false,
         dio_filewriter_enabled: false,
         dio_eswriter_enabled: true,

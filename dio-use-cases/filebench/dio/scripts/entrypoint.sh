@@ -27,8 +27,9 @@ else
 
     elif [ $1 == "strace" ]; then
         echo "Starting Filebench (strace mode)"
+        echo "Strace options: $STRACE_OPTIONS"
         mkdir -p /strace_data
-        exec strace -yy -f -tt -s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat -o /strace_data/strace.out -- $FILEBENCH_COMMAND
+        exec strace -f -tt $STRACE_OPTIONS -o /strace_data/strace.out -- $FILEBENCH_COMMAND
 
     else
         echo "Unknown command: $1"
