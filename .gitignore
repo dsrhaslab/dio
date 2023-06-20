@@ -21,4 +21,6 @@
 libs
 build
 
+*.tar.gz
+
 __pycache__

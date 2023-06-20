@@ -4,6 +4,7 @@
 ```
 
 ```
+*Requires the download of elasticsearch-8.3.0-SNAPSHOT-linux-x86_64.tar.gz*
 
 ## Initiate Elasticsearch:
 
