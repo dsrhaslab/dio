@@ -1,0 +1,16 @@
+param;t01-sysdig-file-detailedPall-AVG;t01-sysdig-file-detailedPall-DEV;t06-sysdig-elk-detailedPall_bs125_bd50-AVG;t06-sysdig-elk-detailedPall_bs125_bd50-DEV;t06-sysdig-elk-detailedPall_bs250_bd50-AVG;t06-sysdig-elk-detailedPall_bs250_bd50-DEV;t06-sysdig-elk-detailedPall_bs500_bd50-AVG;t06-sysdig-elk-detailedPall_bs500_bd50-DEV
+total_cpu_usage__usr;19,236;0;20,587;0;26,878;0;29,757;0
+total_cpu_usage__sys;78,236;0;78,319;0;71,853;0;69,042;0
+total_cpu_usage__idl;0,955;0;0,583;0;0,823;0;0,781;0
+total_cpu_usage__wai;1,573;0;0,511;0;0,446;0;0,42;0
+total_cpu_usage__stl;0,0;0;0,0;0;0,0;0;0,0;0
+memory_usage__used;449135933,296;0;1758085077,2;0;1714626473,586;0;1702531623,549;0
+memory_usage__free;2017366323,681;0;13164268018,625;0;13234467999,865;0;13257183377,37;0
+memory_usage__buff;51716211,38;0;51961500,757;0;52195029,873;0;52049757,528;0
+memory_usage__cach;13546794147,455;0;1435819146,031;0;1409871915,207;0;1400819438,363;0
+net/total__recv;55,952;0;33051,024;0;51180,273;0;60361,868;0
+net/total__send;1,697;0;2118963,578;0;3831454,368;0;4662028,437;0
+dsk/total__read;285383,512;0;25,68;0;17027,781;0;192,401;0
+dsk/total__writ;157089176,638;0;6927675,653;0;6898428,759;0;6867311,699;0
+swap__used;43952003,005;0;43393024,0;0;43384832,0;0;43376640,0;0
+swap__free;983648380,995;0;984207360,0;0;984215552,0;0;984223744,0;0
