@@ -13,6 +13,14 @@
     path: "{{ tracing_data_dir }}/strace/strace_data"
     state: directory
 
+- name: Copy events stats script
+  copy:
+    src: files/get_strace_events_stats.sh
+    dest: "{{ filebench_dir }}/get_strace_events_stats.sh"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+
 - name: Get hostname
   shell: uname -n
   register: target_hostname
@@ -48,7 +56,7 @@
       - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
     env:
       STRACE_OPTIONS: "{{strace_options}}"
-    command: "strace"
+    command: "{{ 'strace filter_tid' if (filter_tid|bool == true) else 'strace' }}"
   register: strace_container
 
 - name: Pause for 10 seconds
@@ -88,6 +96,9 @@
 
 - shell: echo "{{trace_ls_size.stdout}}" > "{{tracing_data_dir}}/strace/trace-size.txt"
   ignore_errors: true
+
+- name: Get trace stats
+  shell: bash {{ filebench_dir }}/get_strace_events_stats.sh -i {{ tracing_data_dir }}/strace/strace_data/strace.out -o {{ tracing_data_dir }}/strace/tracer-stats.txt
 
 - shell: rm {{ tracing_data_dir }}/strace/strace_data/strace.out
   become: yes

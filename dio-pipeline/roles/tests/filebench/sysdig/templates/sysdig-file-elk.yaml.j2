@@ -1,7 +1,7 @@
 version: '2.4'
 services:
   sysdig:
-      image: sysdig/sysdig:0.31.4
+      image: taniaesteves/sysdig-filebench:1.0.0
       network_mode: host
       privileged: true
       volumes:
@@ -11,9 +11,15 @@ services:
         - /boot:/host/boot:ro
         - /lib/modules:/host/lib/modules:ro
         - /usr:/host/usr:ro
+        - /etc:/host/etc:ro
         - "{{ tracing_data_dir }}/sysdig/sysdig_data:/home"
-      command: {{ sysdig_command }}
       environment:
         - SYSDIG_BPF_PROBE=
+        - ES_HOSTS={{es_nodes_ips_list | regex_replace('\"', '') }}
+        - ES_USERNAME={{dio_es_user}}
+        - ES_PASSWORD={{dio_es_pass}}
+        - SYSDIG_COMMAND={{ sysdig_parse_command }}
+        - LS_BATCH_SIZE={{ ls_batch_size }}
+        - LS_BATCH_DELAY={{ ls_batch_delay }}
       stop_grace_period: 2m
 

@@ -12,7 +12,7 @@ services:
         - /lib/modules:/host/lib/modules:ro
         - /usr:/host/usr:ro
         - "{{ tracing_data_dir }}/sysdig/sysdig_data:/home"
-      command: sysdig "evt.type in ('read', 'pread', 'readv', 'write', 'pwrite', 'writev')" and evt.dir='<' and not evt.buffer exists -c topscalls -r /home/sysdig_trace.scap
+      command: /usr/bin/time --verbose --output=/home/time-sysdig-tracing.txt {{ sysdig_command }} -w /home/sysdig_trace.scap
       environment:
         - SYSDIG_BPF_PROBE=
       stop_grace_period: 2m

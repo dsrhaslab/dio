@@ -54,7 +54,6 @@
       - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
     command: "{{ 'dio filter_tid' if (filter_tid|bool == true) else 'dio' }}"
   register: dio_container
-    # entrypoint: "{{ dio_filebench_entrypoint_filter_tid if (filter_tid|bool == true) else dio_filebench_entrypoint }}"
 
 - name: Pause for 10 seconds
   pause:

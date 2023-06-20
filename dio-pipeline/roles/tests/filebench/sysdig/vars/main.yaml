@@ -1,1 +1,12 @@
-sysdig_command: sysdig container.name="vanilla_filebench" and "evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')" -s 1 -w /home/sysdig_trace.scap
+sysdig_command: sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name="vanilla_filebench" and "evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')" -s 1 -w /home/sysdig_trace.scap
+sysdig_parse_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\"  -r /home/sysdig_trace.scap"
+
+sysdig_file_enabled: true
+sysdig_elk_enabled: false
+sysdig_dev_null_enabled: false
+sysdig_compose_file: "sysdig-file.yaml"
+
+ls_batch_size: 125
+ls_batch_delay: 50
+
+sysdig_stats_script: "/usr/share/sysdig/get_events_stats.sh"

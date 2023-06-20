@@ -20,3 +20,5 @@
 
 libs
 build
+
+__pycache__

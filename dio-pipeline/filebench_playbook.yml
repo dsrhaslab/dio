@@ -65,28 +65,101 @@
         strace_options: "-yy -s 4096 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
       }
 
-# ------ SYSDIG
+# ------ SYSDIG FILE
 
-- name: Sysdig (detailedPall)
+- name: Sysdig (detailedPall - File)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPall'],
-        setup_res_dir: "sysdig_detailedPall",
-        sysdig_command: "sysdig container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1 -w /home/sysdig_trace.scap"
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_file_detailedPall'],
+        setup_res_dir: "sysdig-file-detailedPall",
+        sysdig_file_enabled: true,
+        sysdig_elk_enabled: false,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1"
       }
 
-- name: Sysdig (detailedPallCplain)
+- name: Sysdig (detailedPallCplain - File)
   hosts: test
   gather_facts: no
   become: no
   roles:
-    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPallCplain'],
-        setup_res_dir: "sysdig_detailedPallCplain",
-        sysdig_command: "sysdig container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 4096 -w /home/sysdig_trace.scap"
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_file_detailedPallCplain'],
+        setup_res_dir: "sysdig-file-detailedPallCplain",
+        sysdig_file_enabled: true,
+        sysdig_elk_enabled: false,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 4096"
       }
 
+# ------ SYSDIG ELK
+
+- name: Sysdig (detailedPall - ELK)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_elk_detailedPall'],
+        setup_res_dir: "sysdig-elk-detailedPall",
+        sysdig_file_enabled: false,
+        sysdig_elk_enabled: true,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1"
+      }
+
+- name: Sysdig (detailedPallCplain - ELK)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_elk_detailedPallCplain'],
+        setup_res_dir: "sysdig-elk-detailedPallCplain",
+        sysdig_file_enabled: false,
+        sysdig_elk_enabled: true,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 4096"
+      }
+
+# ------ SYSDIG FILE+ELK
+
+- name: Sysdig (detailedPall - FILE+ELK)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_file_elk_detailedPall'],
+        setup_res_dir: "sysdig-file-elk-detailedPall",
+        sysdig_file_enabled: true,
+        sysdig_elk_enabled: true,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1",
+        sysdig_parse_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" -r /home/sysdig_trace.scap"
+      }
+
+- name: Sysdig (detailedPallCplain - FILE+ELK)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_file_elk_detailedPallCplain'],
+        setup_res_dir: "sysdig-file-elk-detailedPallCplain",
+        sysdig_file_enabled: true,
+        sysdig_elk_enabled: true,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 4096",
+        sysdig_parse_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" -r /home/sysdig_trace.scap"
+      }
+
+# ------ SYSDIG FILE+/dev/null
+
+- name: Sysdig (detailedPall - FILE+ELK)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_file_dev_null_detailedPall'],
+        setup_res_dir: "sysdig-file-dev-null-detailedPall",
+        sysdig_file_enabled: true,
+        sysdig_elk_enabled: false,
+        sysdig_dev_null_enabled: true,
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1",
+        sysdig_parse_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" -r /home/sysdig_trace.scap"
+      }
 # ------ DIO ELK
 
 - name: DIO (ELK - raw)
@@ -406,16 +479,26 @@
 
 # ------ FILTERS BY TID
 
-# - name: Strace (with paths - TID filter)
+- name: Strace (detailedPall - TID filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall_tid_filter'],
+        setup_res_dir: "strace-detailedPall-tid-filter",
+        strace_options: "-yy -s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat",
+        filter_tid: true
+      }
+
+# - name: Sysdig (detailedPall - TID filter)
 #   hosts: test
 #   gather_facts: no
 #   become: no
 #   roles:
-#     - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall_tid_filter'],
-#         setup_res_dir: "strace-detailedPall-tid-filter",
-#         strace_options: "-yy -s 0 -e trace=open,openat,creat,read,pread64,readv,write,pwrite64,writev,lseek,truncate,ftruncate,rename,renameat,renameat2,close,unlink,unlinkat,stat,fstat,lstat,fstatfs,newfstatat,setxattr,getxattr,listxattr,removexattr,lsetxattr,lgetxattr,llistxattr,lremovexattr,fsetxattr,fgetxattr,flistxattr,fsync,fdatasync,readahead,readlink,readlinkat,mknod,mknodat"
+#     - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPall_tid_filter'],
+#         setup_res_dir: "sysdig-detailedPall",
+#         sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat')\" -s 1 -w /home/sysdig_trace.scap"
 #       }
-
 
 - name: DIO (ELK - detailedPall - TID filter)
   hosts: test
@@ -443,6 +526,26 @@
 
 # ------ FILTERS BY ORWC
 
+- name: Strace (detailedPall - ORWC filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall_orwc_filter'],
+        setup_res_dir: "strace-detailedPall-orwc-filter",
+        strace_options: "-yy -s 0 -e trace=open,openat,read,pread64,readv,write,pwrite64,writev,close"
+      }
+
+- name: Sysdig (detailedPall - ORWC filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPall_orwc_filter'],
+        setup_res_dir: "sysdig-detailedPall-orwc-filter",
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('open','openat','read','pread','readv','write','pwrite','writev','close')\" -s 1 -w /home/sysdig_trace.scap"
+      }
+
 - name: DIO (ELK - detailedPall - ORWC filter)
   hosts: test
   gather_facts: no
@@ -468,6 +571,26 @@
 
 # ------ FILTERS BY READ
 
+- name: Strace (detailedPall - READ filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall_read_filter'],
+        setup_res_dir: "strace-detailedPall-read-filter",
+        strace_options: "-yy -s 0 -e trace=read"
+      }
+
+- name: Sysdig (detailedPall - READ filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPall_read_filter'],
+        setup_res_dir: "sysdig-detailedPall-read-filter",
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('read')\" -s 1 -w /home/sysdig_trace.scap"
+      }
+
 - name: DIO (ELK - detailedPall - READ filter)
   hosts: test
   gather_facts: no
@@ -492,6 +615,26 @@
       }
 
 # ------ FILTERS BY RENAME (PASSIVE)
+
+- name: Strace (detailedPall - PASSIVE filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/strace, when: caches_clean, tags: ['never','strace_detailedPall_passive_filter'],
+        setup_res_dir: "strace-detailedPall-passive-filter",
+        strace_options: "-yy -s 0 -e trace=renameat2"
+      }
+
+- name: Sysdig (detailedPall - PASSIVE filter)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/sysdig, when: caches_clean, tags: ['never','sysdig_detailedPall_passive_filter'],
+        setup_res_dir: "sysdig-detailedPall-passive-filter",
+        sysdig_command: "sysdig -B -t a -p \"*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args\" container.name=\"vanilla_filebench\" and \"evt.type in ('renameat2')\" -s 1 -w /home/sysdig_trace.scap"
+      }
 
 - name: DIO (ELK - detailedPall - PASSIVE filter)
   hosts: test

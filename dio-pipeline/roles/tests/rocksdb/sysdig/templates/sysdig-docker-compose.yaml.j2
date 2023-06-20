@@ -12,7 +12,7 @@ services:
         - /lib/modules:/host/lib/modules:ro
         - /usr:/host/usr:ro
         - {{ tracing_data_dir }}/sysdig/sysdig_data:/home
-      command: sysdig container.name="tests_rocksdb_vanilla_rocksdb_1" and "evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','close')" and fd.name contains "kvstore" -s 1 -w /home/sysdig_trace.scap
+      command: sysdig -B -t a -p "*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args" container.name="tests_rocksdb_vanilla_rocksdb_1" and "evt.type in ('open','openat','creat','read','pread','readv','write','pwrite','close')" and fd.name contains "kvstore" -s 1 -w /home/sysdig_trace.scap
       environment:
         - SYSDIG_BPF_PROBE=
       stop_grace_period: 2m
