@@ -27,7 +27,14 @@ RANDOM_INDEX=$((1 + $RANDOM % $PID_LIST_LEN))
 
 echo "$dt | PID list: ${PID_LIST[*]}"
 
-echo "$dt | Running DIO for tid ${PID_LIST[$RANDOM_INDEX]}"
-# /usr/share/dio/bin/dio --tid ${PID_LIST[$RANDOM_INDEX]}
-export DIO_OPTIONS="--tid "${PID_LIST[$RANDOM_INDEX]}
-/usr/share/dio/start_dio.sh
+if [ "$1" == "DIO" ]; then
+        echo "$dt | Running DIO for tid ${PID_LIST[$RANDOM_INDEX]}"
+        export DIO_OPTIONS="--tid "${PID_LIST[$RANDOM_INDEX]}
+        /usr/share/dio/start_dio.sh
+elif [ "$1" == "strace" ]; then
+        echo "$dt | Running strace for tid ${PID_LIST[$RANDOM_INDEX]}"
+        exec strace -f -tt $STRACE_OPTIONS -p ${PID_LIST[$RANDOM_INDEX]} -o /strace_data/strace.out
+else
+        echo "$dt | Unknown tracer: $1"
+fi
+

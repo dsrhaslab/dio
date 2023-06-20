@@ -1,0 +1,6 @@
+xpack.monitoring.elasticsearch.hosts: "${ES_HOSTS}"
+xpack.monitoring.elasticsearch.username: "${ES_USERNAME}"
+xpack.monitoring.elasticsearch.password: "${ES_PASSWORD}"
+
+pipeline.batch.size: "${LS_BATCH_SIZE}"
+pipeline.batch.delay: "${LS_BATCH_DELAY}"

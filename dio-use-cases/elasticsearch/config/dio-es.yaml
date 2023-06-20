@@ -1,0 +1,43 @@
+tracer:
+  session_name: ""
+  events: ["storage"]
+  target_paths: []
+  target_pids: []
+  target_tids: []
+  trace_old_processes: true
+  capture_proc_events: false
+  detailed_data: true
+  detail_with_content: "off"
+  detail_with_arg_paths: true
+  detail_with_sock_addr: false
+  detail_with_sock_data: false
+  discard_errors: false
+  discard_directories: false
+  maps_strategy: "one2each"
+  perfmap_size: 65536
+  show_stats: true
+  stats_path: "/dio_data/dio-stats.json"
+  number_consumers: 4
+  wait_timeout: -1
+
+output:
+  file_writer:
+    enabled: false
+    filename: "/dio_data/dio-trace.json"
+  elasticsearch_writer:
+    enabled: true
+    servers: ["http://cloud124:31111"]
+    username: "dio"
+    password: "diopw"
+    flush_bytes: 7000000
+    flush_interval: 30
+
+logger:
+  debug_mode: false
+  log2stdout: true
+  log2file: true
+  log_filename: "/dio_data/dio-log.txt"
+  profiling_on: true
+  profiling_result: "/dio_data/dio-profiling.txt"
+  save_timestamps: false
+  profiling_times_result: "/dio_data/dio-profiling-times.txt"
