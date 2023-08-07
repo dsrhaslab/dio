@@ -1,4 +1,4 @@
-FROM taniaesteves/dio-tracer:v1.0.2
+FROM taniaesteves/dio-tracer:v1.0.3
 
 WORKDIR /
 

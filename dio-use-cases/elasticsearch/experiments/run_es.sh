@@ -7,12 +7,14 @@ RUN=0
 ES_URL="cloud124:31111"
 ES_USERNAME="dio"
 ES_PASSWORD="diopw"
-# DIO_CONF="/home/$USER/ES/dio-es.yaml"
 CUR_DIR=$(pwd)
-TMP_DIR="$CUR_DIR/tmp"
+TRACING_DIR="/mnt/nvme/tracing-elastic"
+TMP_DIR="$TRACING_DIR/tmp"
 RESULTS_DIR="$CUR_DIR/results"
+SLEEP_TIME=120
+DSTAT_PID=0
 
-mkdir -p $TMP_DIR
+sudo mkdir -p $TMP_DIR
 mkdir -p $RESULTS_DIR
 
 VANILLA_CONTAINER="docker run -it -d --name es830 --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ taniaesteves/elasticsearch_dio:v1.0.0"
@@ -27,16 +29,36 @@ BENCHMARK_CONTAINER="docker run --rm  --net=host elastic/rally race --track=geon
 
 CURRENT_CONTAINER="$VANILLA_CONTAINER"
 
+
+# $1 - setup
+# $2 - run number
+function start_dstat {
+    python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "$RESULTS_DIR/$1_dstat_$2.txt" > /dev/null 2>&1 &
+    DSTAT_PID=$!
+    echo "DSTAT PID: $DSTAT_PID"
+}
+
+function stop_dstat {
+    echo "Killing dstat $DSTAT_PID"
+    kill -9 $DSTAT_PID
+}
+
+
 function test {
     echo "---- Starting elasticsearch container ($1-$RUN)"
+    start_dstat $1 $RUN
+    sleep 10
     eval $CURRENT_CONTAINER
-    sleep 120
+    sleep $SLEEP_TIME
     echo "---- Starting benchmark container ($1-$RUN)"
     $BENCHMARK_CONTAINER > $RESULTS_DIR/$1_bench_results_$RUN.txt 2>&1
     echo "---- Stopping elasticsearch container ($1-$RUN)"
     docker stop es830
     docker container wait es830
     docker rm es830
+    sleep 10
+    echo "---- Stopping dstat ($1-$RUN)"
+    stop_dstat $1 $RUN
 }
 
 function vanilla {
@@ -111,6 +133,13 @@ function parse_strace_all {
 function delete_dio_indexes {
     curl -u "$ES_USERNAME:$ES_PASSWORD" -k -X DELETE "$ES_URL/dio*?pretty"
     sudo sh -c "echo 3 >'/proc/sys/vm/drop_caches' && swapoff -a && swapon -a && printf '\n%s\n' 'Ram-cache and Swap Cleared'"
+}
+
+function use_case {
+    delete_dio_indexes
+    echo ">> Running test for DIO Elasticsearch ($RUN)"
+    dio
+    echo "<< Done"
 }
 
 # usage: run_test <test> <runs>

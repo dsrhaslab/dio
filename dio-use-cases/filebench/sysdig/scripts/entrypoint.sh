@@ -11,7 +11,7 @@ echo "$(date) |  -- SYSDIG_COMMAND: ${SYSDIG_COMMAND}"
 function save_time(){
     end=`date +%s.%N`
     runtime=$( echo "$end - $start" | bc -l )
-    echo "Runtime was $runtime seconds" | tee -a /home/time-sysdig-parse-dev-null.txt
+    echo "Runtime was $runtime seconds" | tee -a /home/time-sysdig-tracing-and-parsing.txt
 }
 
 #--- Stop sysdig

@@ -8,20 +8,23 @@ ES_URL="cloud124:31111"
 ES_USERNAME="dio"
 ES_PASSWORD="diopw"
 CUR_DIR=$(pwd)
-TMP_DIR="$CUR_DIR/tmp"
+TRACING_DIR="/mnt/nvme/tracing-redis"
+TMP_DIR="$TRACING_DIR/tmp"
 RESULTS_DIR="$CUR_DIR/results"
 SLEEP_TIME=120
+PALL=false
+DSTAT_PID=0
 
-mkdir -p $TMP_DIR
+sudo mkdir -p $TMP_DIR
 mkdir -p $RESULTS_DIR
 
 VANILLA_CONTAINER="docker run -it -d --name redis-server  --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ taniaesteves/redis_dio:v1"
 
 STRACE_CONTAINER="docker run -it -d --name redis-server  --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ -v $TMP_DIR/strace_data:/strace_data taniaesteves/redis_dio:v1 strace"
 
-DIO_CONTAINER="docker run -it -d --name redis-server  --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ -v $TMP_DIR/dio_data:/dio_data -e CORRELATE_PATHS=true -e ES_URL=$ES_URL  taniaesteves/redis_dio:v1 dio"
+DIO_CONTAINER="docker run -it -d --name redis-server  --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ -v $TMP_DIR/dio_data:/dio_data -e CORRELATE_PATHS=true -e ES_URL=$ES_URL -e DIO_DETAIL_WITH_ARG_PATHS=$PALL taniaesteves/redis_dio:v1 dio"
 
-DIO_CONTAINER_V2="docker run -it -d --name redis-server  --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ -v $TMP_DIR/dio_data:/dio_data -e CORRELATE_PATHS=true -e ES_URL=$ES_URL  taniaesteves/redis_dio:v2 dio"
+DIO_CONTAINER_V2="docker run -it -d --name redis-server  --pid=host --privileged --cap-add=ALL --net=host -v /lib/modules:/lib/modules -v /usr/src:/usr/src -v /sys/kernel/debug/:/sys/kernel/debug/ -v $TMP_DIR/dio_data:/dio_data -e CORRELATE_PATHS=true -e ES_URL=$ES_URL -e DIO_DETAIL_WITH_ARG_PATHS=$PALL taniaesteves/redis_dio:v2 dio"
 
 SYSDIG_CONTAINER='docker run -it -d --name sysdig --privileged -v /var/run/docker.sock:/host/var/run/docker.sock -v /dev:/host/dev -v /proc:/host/proc:ro -v /boot:/host/boot:ro -v /lib/modules:/host/lib/modules:ro -v /usr:/host/usr:ro -v '$TMP_DIR'/sysdig_data:/home --net=host -e SYSDIG_BPF_PROBE="" sysdig/sysdig:0.31.4 sysdig -B -t a -p "*%evt.num %evt.outputtime %evt.cpu %proc.name (%thread.tid) %evt.dir %evt.type %evt.rawres %evt.args" container.name="redis-server" and "evt.type in ('"'open','openat','creat','read','pread','readv','write','pwrite','writev','lseek','truncate','ftruncate','rename','renameat','renameat2','close','unlink','unlinkat','stat','fstat','lstat','fstatfs','newfstatat','setxattr','getxattr','listxattr','removexattr','lsetxattr','lgetxattr','llistxattr','lremovexattr','fsetxattr','fgetxattr','flistxattr','fsync','fdatasync','readlink','readlinkat','mknod','mknodat'"')" and "fd.type in  ('"'file','directory'"')" -s 1 -w /home/sysdig_trace.scap'
 
@@ -29,7 +32,23 @@ BENCHMARK_CONTAINER="docker run -it --rm --name redis-bench --pid=host --privile
 
 CURRENT_CONTAINER="$VANILLA_CONTAINER"
 
+# $1 - setup
+# $2 - run number
+function start_dstat {
+    python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "$RESULTS_DIR/$1_dstat_$2.txt" > /dev/null 2>&1 &
+    DSTAT_PID=$!
+    echo "DSTAT PID: $DSTAT_PID"
+}
+
+function stop_dstat {
+    echo "Killing dstat $DSTAT_PID"
+    kill -9 $DSTAT_PID
+}
+
 function test {
+    echo "---- Starting dstat ($1-$RUN)"
+    start_dstat $1 $RUN
+    sleep 10
     echo "---- Starting redis container ($1-$RUN)"
     $CURRENT_CONTAINER
     sleep $SLEEP_TIME
@@ -39,6 +58,9 @@ function test {
     docker stop redis-server
     docker container wait redis-server
     docker rm redis-server
+    sleep 10
+    echo "---- Stopping dstat ($1-$RUN)"
+    stop_dstat $1 $RUN
 }
 
 function vanilla {
@@ -160,9 +182,10 @@ function run_test {
 
 function run_all {
     RUNS=$1
-    run_test vanilla $RUNS
-    run_test sysdig $RUNS
-    run_test strace $RUNS
+    # run_test vanilla $RUNS
+    # run_test sysdig $RUNS
+    # run_test strace $RUNS
+    echo "Running all tests for $RUNS runs: DetailedPall=$PALL"
     run_test dio $RUNS
 }
 

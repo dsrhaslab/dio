@@ -19,6 +19,9 @@ COPY config/sysdig-logstash.conf /usr/share/logstash/sysdig-logstash.conf
 COPY scripts/entrypoint.sh /usr/share/sysdig/entrypoint.sh
 RUN chmod +x /usr/share/sysdig/entrypoint.sh
 
+COPY scripts/entrypoint-file.sh /usr/share/sysdig/entrypoint-file.sh
+RUN chmod +x /usr/share/sysdig/entrypoint-file.sh
+
 COPY scripts/entrypoint-dev-null.sh /usr/share/sysdig/entrypoint-dev-null.sh
 RUN chmod +x /usr/share/sysdig/entrypoint-dev-null.sh
 
