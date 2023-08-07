@@ -17,6 +17,7 @@ type Writer struct {
 	mutex        sync.RWMutex
 	n_events     int
 	saved_events int
+	first        bool
 	last_off     int
 	bulk         []event.Event
 	bulkSize     int
@@ -34,6 +35,7 @@ func Open(conf *config.FileWriterConf, sessionID string) (*Writer, error) {
 		out_file:     out_file,
 		n_events:     0,
 		saved_events: 0,
+		first:        true,
 		last_off:     0,
 		bulk:         []event.Event{},
 		bulkSize:     0,
@@ -64,13 +66,25 @@ func (jwriter *Writer) persist(v event.Event) error {
 	}
 
 	m = m[:len(m)-1]
-	if jwriter.saved_events > 0 {
-		bcomma := []byte(",")
+	second := false
+	jwriter.mutex.Lock()
+	if jwriter.first {
+		jwriter.first = false
+		second = false
+	} else {
+		second = true
+	}
+	jwriter.mutex.Unlock()
+	if second {
+		bcomma := []byte(",\n")
 		m = append(bcomma, m...)
 	}
 	if utils.LoggerConf.SaveTimestamps {
 		utils.SaveTimestamp("add2disk", 1, binary.Size(m))
 	}
+
+	jwriter.first = true
+	jwriter.mutex.Unlock()
 	_, err = jwriter.out_file.Write(m)
 	if err != nil {
 		return fmt.Errorf("failed saving event to file: %s", err.Error())
@@ -105,8 +119,17 @@ func (jwriter *Writer) persistBulk() error {
 	}
 
 	m = m[1 : len(m)-2]
-	if jwriter.saved_events > 0 {
-		bcomma := []byte(",")
+	second := false
+	jwriter.mutex.Lock()
+	if jwriter.first {
+		jwriter.first = false
+		second = false
+	} else {
+		second = true
+	}
+	jwriter.mutex.Unlock()
+	if second {
+		bcomma := []byte(",\n")
 		m = append(bcomma, m...)
 	}
 
@@ -117,7 +140,6 @@ func (jwriter *Writer) persistBulk() error {
 	if err != nil {
 		return fmt.Errorf("failed saving event to file: %s", err.Error())
 	}
-
 	jwriter.mutex.Lock()
 	jwriter.saved_events += bulkSize
 	jwriter.mutex.Unlock()
