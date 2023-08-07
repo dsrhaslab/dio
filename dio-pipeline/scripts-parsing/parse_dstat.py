@@ -8,7 +8,8 @@ import sys
 import os
 import csv
 import commons
-
+from datetime import datetime
+from datetime import timedelta
 
 def parseSetup(path):
     runs = commons.ListDir(path)
@@ -19,6 +20,7 @@ def parseSetup(path):
         run_p_file = path + "/" + run + "/dstat.csv"
         print("++++++ Parsing file '{0}'".format(run_p_file))
 
+        init_time = 0
         with open(run_p_file) as f:
             reader = csv.reader(f)
 
@@ -79,11 +81,32 @@ def parseSetup(path):
                     for index in range(len(row)-1):
                         # ignore time column
                         if "time" in header[index]:
+                            if init_time == 0:
+                                datetime_object = datetime.strptime(row[index], '%d-%m %H:%M:%S')
+
+                                print(type(datetime_object))
+                                print(datetime_object)  # printed in default format
+                                init_time = datetime_object
+                                five_minutes = init_time+timedelta(minutes=3)
+                                fifteen_minutes = init_time+timedelta(minutes=18)
+                                print("first time is: ", row[index], ", init_time is: ", init_time, "five_minutes is: ", five_minutes, "fifteen_minutes is: ", fifteen_minutes)
+                                # input()
+                            # print("time is: ", row[index], ", init_time is: ", init_time)
+                            cur_time = datetime.strptime(row[index], '%d-%m %H:%M:%S')
+                            if cur_time < five_minutes:
+                                # print("time is to discard: ", row[index], ", init_time is: ", init_time, "five_minutes is: ", five_minutes)
+                                # input()
+                                break
+                            if cur_time > fifteen_minutes:
+                                # print("time is to discard: ", row[index], ", init_time is: ", init_time, "fifteen_minutes is: ", fifteen_minutes)
+                                # input()
+                                break
                             continue
 
                         if not header[index] in run_values:
                             run_values[header[index]] = []
                         run_values[header[index]].append(float(row[index]))
+
 
             # Compute averages
             for cur in run_values:

@@ -1,7 +1,7 @@
 version: '2.4'
 services:
   sysdig:
-      image: sysdig/sysdig:0.31.4
+      image: taniaesteves/sysdig-filebench:1.0.0
       network_mode: host
       privileged: true
       volumes:
@@ -12,7 +12,7 @@ services:
         - /lib/modules:/host/lib/modules:ro
         - /usr:/host/usr:ro
         - "{{ tracing_data_dir }}/sysdig/sysdig_data:/home"
-      command: /usr/bin/time --verbose --output=/home/time-sysdig-tracing.txt {{ sysdig_command }} -w /home/sysdig_trace.scap
+      command: /bin/bash /usr/share/sysdig/entrypoint-file.sh
       environment:
         - SYSDIG_BPF_PROBE=
       stop_grace_period: 2m

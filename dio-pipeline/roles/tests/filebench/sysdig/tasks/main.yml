@@ -164,6 +164,10 @@
   become: yes
   ignore_errors: true
 
+- shell: curl -u "{{dio_es_user}}:{{dio_es_pass}}" 'http://{{kibana_ip}}:31111/_stats' | jq > "{{tracing_data_dir}}/sysdig/es-index-size.txt"
+  when: sysdig_elk_enabled|bool == true
+  ignore_errors: true
+
 - shell: (cd "{{ tracing_data_dir }}/sysdig"; find "$PWD"/* -maxdepth 2 -type f)
   register: files_to_copy
 

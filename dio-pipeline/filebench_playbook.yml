@@ -370,6 +370,32 @@
         dio_detail_with_sock_data: false,
       }
 
+# ------ DIO File + ES
+- name: DIO (File+ES - detailedPall)
+  hosts: test
+  gather_facts: no
+  become: no
+  roles:
+    - { role: tests/filebench/dio, when: caches_clean, tags: ['never','dio_file_es_detailedPall'],
+        setup_res_dir: "dio-file-es-detailedPall",
+        dio_eswriter_enabled: false,
+        dio_filewriter_enabled: true,
+        dio_filewriter_bulk: true,
+        dio_filewriter_bulk_size: 1000,
+        dio_send_file2es: true,
+        dio_target_events: ["storage"],
+        dio_wait_timeout: -1,
+        dio_prof_on: true,
+        dio_prof_times: false,
+        dio_detailed_data: true,
+        dio_detail_with_content: "off",
+        dio_detail_with_arg_paths: true,
+        dio_detail_with_sock_addr: false,
+        dio_detail_with_sock_data: false,
+        dio_number_consumers: 1
+      }
+
+
 # ------ DIO Nop
 
 - name: DIO (NOP - raw2

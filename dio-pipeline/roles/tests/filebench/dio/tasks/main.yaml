@@ -25,6 +25,15 @@
     mode:  0644
   become: yes
 
+- name: Copy DIO exporter script
+  when: dio_send_file2es|bool == true
+  copy:
+    src: files/dio-exporter.py
+    dest: "{{ filebench_dir }}/dio-exporter.py"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+
 - name: Start Dstat
   shell: screen -S "FILEBENCH_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{ tracing_data_dir }}/dio/dstat.csv"
 
@@ -76,7 +85,8 @@
 - name: Save logs
   shell: docker logs dio_filebench > "{{ tracing_data_dir }}/dio/docker_logs.txt" 2>&1
 
-- shell: ls -lah {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
+- name: get trace size
+  shell: ls -lah {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
   when: dio_filewriter_enabled|bool == true
   become: yes
   ignore_errors: true
@@ -87,11 +97,13 @@
   when: dio_filewriter_enabled|bool == true
   ignore_errors: true
 
-- shell: echo "{{trace_ls_size.stdout}}" > "{{tracing_data_dir}}/dio/trace-size.txt"
+- name: save trace size to file
+  shell: echo "{{trace_ls_size.stdout}}" > "{{tracing_data_dir}}/dio/trace-size.txt"
   when: dio_filewriter_enabled|bool == true
   ignore_errors: true
 
-- shell: jq length {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
+- name: count trace events
+  shell: jq length {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
   when: dio_filewriter_enabled|bool == true
   become: yes
   ignore_errors: true
@@ -102,13 +114,25 @@
   when: dio_filewriter_enabled|bool == true
   ignore_errors: true
 
-- shell: echo "{{trace_events_size.stdout}}" > "{{tracing_data_dir}}/dio/trace-events-size.txt"
+- name: save trace events to file
+  shell: echo "{{trace_events_size.stdout}}" > "{{tracing_data_dir}}/dio/trace-events-size.txt"
   when: dio_filewriter_enabled|bool == true
   ignore_errors: true
 
-- shell: rm {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
+- name: send data to ES
+  when: dio_send_file2es|bool == true
+  shell: python3.10 "{{ filebench_dir }}/dio-exporter.py" -u http://{{kibana_ip}}:31111 --size 15000 {{ tracing_data_dir }}/dio/dio_data/dio-trace.json > "{{tracing_data_dir}}/dio/logs-dio-exporter.txt" 2>&1
+  ignore_errors: true
+
+- name: remove DIO trace
+  shell: rm {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
   when: dio_filewriter_enabled|bool == true
   become: yes
+  ignore_errors: true
+
+- name: Get ES index size
+  shell: curl -u "{{dio_es_user}}:{{dio_es_pass}}" 'http://{{kibana_ip}}:31111/_stats' | jq > "{{tracing_data_dir}}/dio/es-index-size.txt"
+  when: dio_eswriter_enabled|bool == true
   ignore_errors: true
 
 - shell: (cd "{{ tracing_data_dir }}/dio"; find "$PWD"/* -maxdepth 2 -type f)

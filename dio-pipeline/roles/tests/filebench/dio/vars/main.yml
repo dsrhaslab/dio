@@ -23,6 +23,8 @@ dio_es_flush_interval: 30
 dio_prof_on: false
 dio_prof_times: false
 
+dio_send_file2es: false
+
 dio_filebench_entrypoint: "/usr/share/dio/bin/dio -- filebench -f /filebench/workloads/fileserver.f"
 dio_filebench_entrypoint_filter_tid: "/filebench/trace_filebench_tid.sh"
 
