@@ -180,6 +180,12 @@ Root cause analysis of data loss caused by erroneous file accesses. The full des
 #### RocksDB
 Root cause analysis of resource contention in multi threaded I/O that leads to high tail latency for user workloads. The full description, how to reproduce and the resulting visual representations can be consulted [here](https://dio-tool.netlify.app/use-cases/rocksdb).
 
+#### Redis
+Diagnosis of inefficient use of system calls that lead to poor storage performance. The full description, how to reproduce and the resulting visual representations can be consulted [here](https://dio-tool.netlify.app/use-cases/redis).
+
+#### Elasticsearch
+Observation of unexpected file access patterns caused by the usage of high-level libraries that lead to redundant I/O calls. The full description, how to reproduce and the resulting visual representations can be consulted [here](https://dio-tool.netlify.app/use-cases/elasticsearch).
+
 <!-- ## Additional information
 **Publications about DIO.**
 You can find [here](.docs/publications.md) a list of publications that extend, improve, and use DIO.
