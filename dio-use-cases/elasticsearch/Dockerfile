@@ -1,4 +1,4 @@
-FROM taniaesteves/dio-tracer:v1.0.0
+FROM taniaesteves/dio-tracer:v1.0.1
 
 RUN apt-get update && apt-get install -y openjdk-17-jdk
 
