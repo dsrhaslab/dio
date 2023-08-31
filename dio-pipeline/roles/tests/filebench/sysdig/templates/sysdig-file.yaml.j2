@@ -1,0 +1,19 @@
+version: '2.4'
+services:
+  sysdig:
+      image: taniaesteves/sysdig-filebench:1.0.0
+      network_mode: host
+      privileged: true
+      volumes:
+        - /var/run/docker.sock:/host/var/run/docker.sock
+        - /dev:/host/dev
+        - /proc:/host/proc:ro
+        - /boot:/host/boot:ro
+        - /lib/modules:/host/lib/modules:ro
+        - /usr:/host/usr:ro
+        - "{{ tracing_data_dir }}/sysdig/sysdig_data:/home"
+      command: /bin/bash /usr/share/sysdig/entrypoint-file.sh
+      environment:
+        - SYSDIG_BPF_PROBE=
+      stop_grace_period: 2m
+

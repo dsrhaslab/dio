@@ -1,0 +1,181 @@
+---
+
+- include_vars: group_vars/kube_cluster.yml
+
+- name: Delete sysdig results directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/sysdig/sysdig_data"
+    state: absent
+
+- name: Create sysdig results directory
+  file:
+    path: "{{ tracing_data_dir }}/sysdig/sysdig_data"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Get hostname
+  shell: uname -n
+  register: target_hostname
+
+- set_fact:
+    sysdig_compose_file: "sysdig-elk.yaml"
+  when: (sysdig_elk_enabled|bool == true) and (sysdig_file_enabled|bool == false)
+
+- set_fact:
+    sysdig_stats_script: "/usr/share/sysdig/get_events_stats_from_es.sh"
+  when: sysdig_elk_enabled|bool == true
+
+- set_fact:
+    suffix: "_bs{{ ls_batch_size }}_bd{{ ls_batch_delay }}"
+  when: sysdig_elk_enabled|bool == true
+
+- name: Create docker-compose files for sysdig
+  template:
+    src: "{{ item }}"
+    dest: "{{ filebench_dir }}/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  with_fileglob:
+    - templates/*.j2
+
+- name: Start Dstat
+  shell: screen -S "FILEBENCH_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{ tracing_data_dir }}/sysdig/dstat.csv"
+
+- name: Pause for 10 seconds
+  pause:
+    seconds: 10
+
+- name: Start Sysdig [run={{run_number}}]
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/{{ sysdig_compose_file }} up -d"
+  register: sysdigcompose_result
+
+- name: Pause for 120 seconds
+  pause:
+    seconds: 120
+
+- name: Running filebench (with sysdig) [run={{run_number}}]
+  docker_container:
+    name: vanilla_filebench
+    image: taniaesteves/filebench_dio:v1.0.0
+    state: started
+    recreate: yes
+    detach: false
+    pid_mode: host
+    network_mode: host
+    hostname: "{{target_hostname.stdout}}"
+    privileged: true
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug/:/sys/kernel/debug/:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - "{{ filebench_data_dir }}:/tmp/filebench"
+      - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
+    command: ""
+  register: vanilla_container
+
+- name: Pause for 120 seconds
+  pause:
+    seconds: 120
+
+- name: Stop sysdig
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/{{ sysdig_compose_file }} stop"
+
+- name: Pause for 10 seconds
+  pause:
+    seconds: 10
+
+- name: Stop dstat
+  shell: screen -X -S "FILEBENCH_DSTAT_{{run_number}}" quit
+  ignore_errors: true
+
+- name: Kill all screen sessions
+  shell: killall screen
+  ignore_errors: true
+  become: yes
+
+- name: Kill all screen sessions
+  shell: pkill screen
+  ignore_errors: true
+  become: yes
+
+- assert:
+    that:
+      - "vanilla_container.container.State.Status == 'exited'"
+
+- name: Save filebench logs
+  shell: docker logs vanilla_filebench > "{{ tracing_data_dir }}/sysdig/docker_logs.txt" 2>&1
+
+- name: Save sysdig logs
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/logs_sysdig.txt" 2>&1
+  ignore_errors: true
+
+- shell: ls -lah {{ tracing_data_dir }}/sysdig/sysdig_data/sysdig_trace.scap
+  become: yes
+  ignore_errors: true
+  when: sysdig_file_enabled|bool == true
+  register: trace_ls_size
+
+- debug:
+    msg: "{{trace_ls_size.stdout}}"
+  when: sysdig_file_enabled|bool == true
+  ignore_errors: true
+
+- shell: echo "{{trace_ls_size.stdout}}" > "{{tracing_data_dir}}/sysdig/trace-size.txt"
+  when: sysdig_file_enabled|bool == true
+  ignore_errors: true
+
+- set_fact:
+    sysdig_compose_file: "sysdig-file-elk.yaml"
+  when: (sysdig_elk_enabled|bool == true) and (sysdig_file_enabled|bool == true)
+
+- set_fact:
+    sysdig_compose_file: "sysdig-file-dev-null.yaml"
+  when: (sysdig_dev_null_enabled|bool == true) and (sysdig_file_enabled|bool == true)
+
+- name: Start Sysdig Parser [run={{run_number}}]
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/{{ sysdig_compose_file }} up"
+  register: sysdigcompose_result
+  when: ((sysdig_elk_enabled|bool == true) and (sysdig_file_enabled|bool == true)) or (sysdig_dev_null_enabled|bool == true) and (sysdig_file_enabled|bool == true)
+
+- name: Save logs (parsing)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/logs_events_parsing.txt" 2>&1
+  when: ((sysdig_elk_enabled|bool == true) and (sysdig_file_enabled|bool == true)) or (sysdig_dev_null_enabled|bool == true) and (sysdig_file_enabled|bool == true)
+
+- name: Get events stats
+  shell:
+    cmd: "docker-compose -f {{ filebench_dir }}/sysdig-events-stats.yaml up"
+  register: sysdigcompose_result
+  when: (sysdig_dev_null_enabled|bool == false)
+
+- name: Save logs (Get total events)
+  shell: docker logs tests_filebench_sysdig_1 > "{{ tracing_data_dir }}/sysdig/logs_events_stats.txt" 2>&1
+  when: (sysdig_dev_null_enabled|bool == false)
+
+- shell: rm {{ tracing_data_dir }}/sysdig/sysdig_data/sysdig_trace.scap
+  when: sysdig_file_enabled|bool == true
+  become: yes
+  ignore_errors: true
+
+- shell: curl -u "{{dio_es_user}}:{{dio_es_pass}}" 'http://{{kibana_ip}}:31111/_stats' | jq > "{{tracing_data_dir}}/sysdig/es-index-size.txt"
+  when: sysdig_elk_enabled|bool == true
+  ignore_errors: true
+
+- shell: (cd "{{ tracing_data_dir }}/sysdig"; find "$PWD"/* -maxdepth 2 -type f)
+  register: files_to_copy
+
+- name: Save results
+  fetch:
+    src: "{{ file_item }}"
+    dest: "final_test_results/filebench/{{prefix}}{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    flat: yes
+  with_items: "{{ files_to_copy.stdout_lines }}"
+  loop_control:
+    loop_var: file_item

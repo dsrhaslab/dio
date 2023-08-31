@@ -1,0 +1,148 @@
+---
+
+- include_vars: group_vars/kube_cluster.yml
+
+- name: Delete DIO results directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/dio/dio_data"
+    state: absent
+
+- name: Create DIO results directory
+  file:
+    path: "{{ tracing_data_dir }}/dio/dio_data"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Create DIO config file
+  template:
+    src: "templates/dio.yml.j2"
+    dest: "{{ filebench_dir }}/dio.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+  become: yes
+
+- name: Copy DIO exporter script
+  when: dio_send_file2es|bool == true
+  copy:
+    src: files/dio-exporter.py
+    dest: "{{ filebench_dir }}/dio-exporter.py"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+
+- name: Start Dstat
+  shell: screen -S "FILEBENCH_DSTAT_{{run_number}}" -d -m python3 /usr/share/dstat/dstat --time --cpu --mem --net --disk --swap --output "{{ tracing_data_dir }}/dio/dstat.csv"
+
+- name: Pause for 10 seconds
+  pause:
+    seconds: 10
+
+- name: Running filebench (with DIO) [run={{run_number}}]
+  docker_container:
+    name: dio_filebench
+    image: taniaesteves/filebench_dio:v1.0.0
+    state: started
+    recreate: yes
+    detach: false
+    pid_mode: host
+    network_mode: host
+    privileged: true
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug/:/sys/kernel/debug/:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - "{{ tracing_data_dir }}/dio/dio_data:/dio_data"
+      - "{{ filebench_data_dir }}:/tmp/filebench"
+      - "{{ filebench_dir }}/dio.yml:/usr/share/dio/conf/config.yaml:ro"
+      - "{{ filebench_dir }}/fileserver.f:/filebench/workloads/fileserver.f"
+    command: "{{ 'dio filter_tid' if (filter_tid|bool == true) else 'dio' }}"
+  register: dio_container
+
+- name: Pause for 10 seconds
+  pause:
+    seconds: 10
+
+- name: Stop dstat
+  shell: screen -XS "FILEBENCH_DSTAT_{{run_number}}" quit
+  ignore_errors: true
+
+- name: Kill all screen sessions
+  shell: killall screen
+  ignore_errors: true
+  become: yes
+
+- assert:
+    that:
+      - "not dio_container.failed"
+      - "dio_container.container.State.Status == 'exited'"
+
+- name: Save logs
+  shell: docker logs dio_filebench > "{{ tracing_data_dir }}/dio/docker_logs.txt" 2>&1
+
+- name: get trace size
+  shell: ls -lah {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
+  when: dio_filewriter_enabled|bool == true
+  become: yes
+  ignore_errors: true
+  register: trace_ls_size
+
+- debug:
+    msg: "{{trace_ls_size.stdout}}"
+  when: dio_filewriter_enabled|bool == true
+  ignore_errors: true
+
+- name: save trace size to file
+  shell: echo "{{trace_ls_size.stdout}}" > "{{tracing_data_dir}}/dio/trace-size.txt"
+  when: dio_filewriter_enabled|bool == true
+  ignore_errors: true
+
+- name: count trace events
+  shell: jq length {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
+  when: dio_filewriter_enabled|bool == true
+  become: yes
+  ignore_errors: true
+  register: trace_events_size
+
+- debug:
+    msg: "{{trace_events_size.stdout}}"
+  when: dio_filewriter_enabled|bool == true
+  ignore_errors: true
+
+- name: save trace events to file
+  shell: echo "{{trace_events_size.stdout}}" > "{{tracing_data_dir}}/dio/trace-events-size.txt"
+  when: dio_filewriter_enabled|bool == true
+  ignore_errors: true
+
+- name: send data to ES
+  when: dio_send_file2es|bool == true
+  shell: python3.10 "{{ filebench_dir }}/dio-exporter.py" -u http://{{kibana_ip}}:31111 --size 15000 {{ tracing_data_dir }}/dio/dio_data/dio-trace.json > "{{tracing_data_dir}}/dio/logs-dio-exporter.txt" 2>&1
+  ignore_errors: true
+
+- name: remove DIO trace
+  shell: rm {{ tracing_data_dir }}/dio/dio_data/dio-trace.json
+  when: dio_filewriter_enabled|bool == true
+  become: yes
+  ignore_errors: true
+
+- name: Get ES index size
+  shell: curl -u "{{dio_es_user}}:{{dio_es_pass}}" 'http://{{kibana_ip}}:31111/_stats' | jq > "{{tracing_data_dir}}/dio/es-index-size.txt"
+  when: dio_eswriter_enabled|bool == true
+  ignore_errors: true
+
+- shell: (cd "{{ tracing_data_dir }}/dio"; find "$PWD"/* -maxdepth 2 -type f)
+  register: files_to_copy
+
+- name: Save results
+  fetch:
+    src: "{{ file_item }}"
+    dest: "final_test_results/filebench/{{prefix}}{{setup_res_dir}}{{suffix}}/run_{{run_number}}/"
+    flat: yes
+  with_items: "{{ files_to_copy.stdout_lines }}"
+  loop_control:
+    loop_var: file_item

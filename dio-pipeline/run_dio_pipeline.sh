@@ -18,4 +18,10 @@ function install_dio_pipeline {
 	ansible-playbook -u $(whoami) -i hosts.ini dio_playbook.yml --tags deploy_dio -e run_all=true
 }
 
+function clean_install {
+	ansible-playbook -u $(whoami) -i hosts.ini dio_playbook.yml --tags delete_dio -e run_all=true
+
+	install_dio_pipeline
+}
+
 "$@"

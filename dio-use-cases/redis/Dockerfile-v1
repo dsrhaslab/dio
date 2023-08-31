@@ -1,0 +1,39 @@
+FROM taniaesteves/dio-tracer:v1.0.0
+
+RUN mkdir -p /redis
+WORKDIR /redis
+
+RUN apt-get update -y && \
+    apt-get install -y linux-headers-generic && \
+    apt-get install -y software-properties-common && \
+    apt-get install -y wget python3 python3-pip git && \
+    apt-get install -y automake autoconf libtool bison flex
+
+RUN apt-get install -y pkg-config
+
+RUN apt-get install -y tcl-dev
+
+RUN git clone https://github.com/redis/redis.git && \
+    cd redis && \
+    git checkout e9ae03787e0a2e0484914737f82bfe216f8e9d52 && \
+    make && \
+    make test
+
+RUN mkdir -p /dio_data
+
+WORKDIR /redis/redis/src
+
+RUN sed 's/protected-mode yes/protected-mode no/g' -i /redis/redis/redis.conf
+RUN sed 's/loglevel notice/loglevel debug/g' -i /redis/redis/redis.conf
+RUN sed 's#logfile ""#logfile /dio_data/redis.log#g' -i /redis/redis/redis.conf
+
+RUN apt-get install -y strace time
+
+COPY config/dio-redis.yaml /usr/share/dio/conf/config.yaml
+
+COPY scripts/start_redis.sh ./start_redis.sh
+RUN chmod +x start_redis.sh
+
+ENV DIO_SESSION_NAME "redis-v1"
+
+ENTRYPOINT [ "/redis/redis/src/start_redis.sh" ]

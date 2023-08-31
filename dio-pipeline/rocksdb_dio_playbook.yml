@@ -73,6 +73,25 @@
         dio_detail_with_sock_data: false
       }
 
+- name: DIO
+  hosts: test
+  gather_facts: yes
+  become: no
+  roles:
+    - { role: tests/rocksdb/dio,
+        when: caches_clean,
+        tags: ['never','dio_raw'],
+        filter_paths: 'true',
+        dio_target_events: ["open", "openat", "creat", "read", "pread64", "write", "pwrite64", "close"],
+        setup_res_dir: "dio_ycsb_wa_raw",
+        dio_detailed_data: false,
+        dio_detail_with_content: "off",
+        dio_detail_with_arg_paths: false,
+        dio_detail_with_sock_addr: false,
+        dio_detail_with_sock_data: false
+      }
+
+
 - name: Strace
   hosts: test
   gather_facts: no

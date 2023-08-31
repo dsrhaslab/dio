@@ -1,0 +1,82 @@
+---
+
+
+- name: Create global results directory
+  become: yes
+  file:
+    path: "{{ results_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Create test data directory
+  become: yes
+  file:
+    path: "{{ test_data_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Delete tracing data directory (if it exists)
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/{{setup}}"
+    state: absent
+
+- name: Create tracing data directory
+  become: yes
+  file:
+    path: "{{ tracing_data_dir }}/{{setup}}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Create filebench results directory
+  file:
+    path: "{{ filebench_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Delete Filebench data directory (if it exists)
+  become: yes
+  file:
+    path: "{{ filebench_data_dir }}"
+    state: absent
+
+- name: Create Filebench data directory
+  file:
+    path: "{{ filebench_data_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    recurse: yes
+
+- name: Copy fileserver workload
+  when: filebench_rate_limit|bool == false
+  copy:
+    src: files/fileserver.f
+    dest: "{{ filebench_dir }}/fileserver.f"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+
+- name: Copy fileserver rate limiting workload
+  when: filebench_rate_limit|bool == true
+  template:
+    src: "templates/fileserver_rate_limit.f.j2"
+    dest: "{{ filebench_dir }}/fileserver.f"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode:  0644
+
+- shell: echo 0 > /proc/sys/kernel/randomize_va_space
+  become: yes
+
+- set_fact:
+    suffix: "_rate_limit_{{ filebench_event_rate }}"
+  when: filebench_rate_limit|bool == true

@@ -92,7 +92,8 @@ func start_tracer_by_pid(conf config.TConfiguration) {
 	go sigHandler(btracer.StopChan)
 
 	// ----- START TRACER -----
-	btracer.Run()
+	err = btracer.Run()
+	checkError(err)
 	btracer.Close()
 }
 
@@ -130,7 +131,8 @@ func start_tracer_for_child_process(target_pid int, conf config.TConfiguration, 
 	go sigHandlerPid(target_pid)
 
 	// ----- START TRACER -----
-	btracer.Run()
+	err = btracer.Run()
+	checkError(err)
 	time.Sleep(5 * time.Second)
 	go startTargetProgram(target_pid, btracer.StopChan)
 

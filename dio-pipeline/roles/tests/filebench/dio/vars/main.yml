@@ -1,0 +1,32 @@
+---
+
+dio_target_events: ["all"]
+dio_target_paths: []
+dio_detailed_data: true
+dio_detail_with_content: "off"
+dio_detail_with_arg_paths: false
+dio_detail_with_sock_addr: false
+dio_detail_with_sock_data: false
+dio_maps_strategy: "one2each"
+dio_perfmap_size: 65536
+dio_number_consumers: 4
+dio_wait_timeout: -1
+dio_timeout: -1
+
+dio_nopwriter_enabled: false
+dio_filewriter_enabled: false
+dio_filewriter_bulk: false
+dio_filewriter_bulk_size: 1000
+dio_eswriter_enabled: true
+dio_es_flush_bytes: 7000000
+dio_es_flush_interval: 30
+dio_prof_on: false
+dio_prof_times: false
+
+dio_send_file2es: false
+
+dio_filebench_entrypoint: "/usr/share/dio/bin/dio -- filebench -f /filebench/workloads/fileserver.f"
+dio_filebench_entrypoint_filter_tid: "/filebench/trace_filebench_tid.sh"
+
+filter_tid: false
+filter_paths:

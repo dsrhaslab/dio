@@ -33,20 +33,19 @@ RUN git clone https://github.com/iovisor/bcc.git && \
     cd build/src/python/ && \
     make -j$(nproc); make install;
 
+RUN apt-get install -y inotify-tools jq
+RUN apt-get update -y && apt-get install -y apt-utils curl
+RUN apt-get install -y vim
+
 WORKDIR /usr/share/dio
 RUN mkdir -p bin conf
 RUN mkdir -p /tmp/dio /dio_data
-
-RUN apt-get install -y vim
 
 # Copy DIO Binary
 COPY bin/dio ./bin/
 
 # Copy DIO default configuration file
 COPY pkg/config/config.yaml ./conf/config.yaml
-
-RUN apt-get install -y inotify-tools jq
-RUN apt-get update -y && apt-get install -y apt-utils curl
 
 COPY scripts/correlate_fp.sh /usr/share/dio/bin/fpca.sh
 RUN chmod u+x /usr/share/dio/bin/fpca.sh

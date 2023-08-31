@@ -1641,7 +1641,7 @@ static void getStorageDataFromIov(char **buf, u64 *len, u64 *count, struct entry
         bpf_probe_read(&total_bytes_request, sizeof(total_bytes_request), &iovec->iov_len);
     }
     bpf_probe_read(buf, sizeof(*buf), &iovec[0].iov_base);
-    bpf_probe_read(count, sizeof(*count), &iovec[0].iov_len);
+    bpf_probe_read(count, sizeof(*count), &total_bytes_request);
     bpf_probe_read(len, sizeof(*len), &total_bytes_request);
 }
 static int submit_storage_data_iov_event(struct pt_regs *ctx, EventStorageData *event, enum event_type e_type, struct pid_info_t *proc_info, struct event_key_t *key,  long return_value)

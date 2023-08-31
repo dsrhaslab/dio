@@ -1,0 +1,6 @@
+---
+
+filebench_dir: "{{results_dir}}/tests_filebench"
+filebench_data_dir: "{{test_data_dir}}/filebench"
+filebench_rate_limit: false
+filebench_event_rate: 12800
