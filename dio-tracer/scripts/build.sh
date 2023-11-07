@@ -14,6 +14,10 @@ function go_build {
     RESULT=$?
     if [ $RESULT -ne 0 ]; then exit $RESULT; fi
 
+    CUR_USER=$(whoami)
+    sudo mkdir -p /usr/share/dio/conf
+    sudo chown -R $CUR_USER:$CUR_USER /usr/share/dio/conf
+    cp pkg/config/config.yaml /usr/share/dio/conf/config.yaml
     echo ">>> Created binary 'bin/dio'"
 }
 

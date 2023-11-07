@@ -21,7 +21,7 @@ output:
   nop_writer:
     enabled: false
   file_writer:
-    enabled: false
+    enabled: true
     filename: "dio-trace.json"
   elasticsearch_writer:
     enabled: false
