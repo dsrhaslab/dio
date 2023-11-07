@@ -83,6 +83,7 @@ func (jwriter *Writer) persist(v event.Event) error {
 		utils.SaveTimestamp("add2disk", 1, binary.Size(m))
 	}
 
+	jwriter.mutex.Lock()
 	jwriter.first = true
 	jwriter.mutex.Unlock()
 	_, err = jwriter.out_file.Write(m)
