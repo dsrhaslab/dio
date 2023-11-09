@@ -1,7 +1,14 @@
 #!/bin/bash
 
-ES_USERNAME="dio"
-ES_PASSWORD="diopw"
+#
+# This script is used to correlate data from the paths index with the elasticsearch data index.
+# Usage:
+# -	to run as a daemon (listining to /tmp/dio folder): ./correlate_fp.sh correlate_daemon <elasticsearch_url> <sleep_time> <n_tries> <stop_on_delete>
+# -	to run for a specific index: ./correlate_fp.sh correlate_index <elasticsearch_url> <index_name>
+
+
+ES_USERNAME="elastic"
+ES_PASSWORD="secret"
 ES_SERVERS="localhost:9200"
 SLEEP=0s
 N_TRIES=3
@@ -14,7 +21,7 @@ echo $$
 # $1: ES_SERVERS
 # $2: Index name
 function create_enrich_policies {
-	echo -n $(date)" | Creating enrich-policy ... "
+	echo -n $(date)" |   > Creating enrich-policy ... "
 	response=$(curl  -u "$ES_USERNAME:$ES_PASSWORD" -s -X PUT "$1/_enrich/policy/match-paths-file-data-policy-$2?pretty" -H 'Content-Type: application/json' -d'
 	{
 		"match": {
@@ -44,7 +51,7 @@ function create_enrich_policies {
 # $1: ES_SERVERS
 # $2: Index name
 function execute_enrich_policies {
-	echo -n $(date)" | Executing enrich-policy ... "
+	echo -n $(date)" |   > Executing enrich-policy ... "
 	response=$(curl  -u "$ES_USERNAME:$ES_PASSWORD" -s -X PUT  "$1/_enrich/policy/match-paths-file-data-policy-$2/_execute?pretty")
 	status=$(echo $response | jq '.status')
 	error=$(echo $response | jq '.error')
@@ -60,7 +67,7 @@ function execute_enrich_policies {
 # $1: ES_SERVERS
 # $2: Index name
 function create_ingest_pipeline {
-	echo -n $(date)" | Creating ingest pipeline ... "
+	echo -n $(date)" |   > Creating ingest pipeline ... "
 	response=$(curl  -u "$ES_USERNAME:$ES_PASSWORD" -s -X PUT "$1/_ingest/pipeline/match-files-data-pipeline-$2?pretty" -H 'Content-Type: application/json' -d'
 	{
 		"description": "Enrich file information",
@@ -115,7 +122,7 @@ function create_ingest_pipeline {
 # $3: N tries
 # return 0 if updated 0, 1 if updated > 0, 2 if failure
 function update_by_query {
-	echo -n $(date)" | Executing update_by_query ... "
+	echo -n $(date)" |   > Executing update_by_query ... "
 	response=$(curl  -u "$ES_USERNAME:$ES_PASSWORD" -s -X POST "$1/$2/_update_by_query?refresh=true&scroll_size=5000&slices=auto&pipeline=match-files-data-pipeline-$2" -H 'Content-Type: application/json' -d'
 	{
 		"query": {
@@ -170,7 +177,7 @@ function updateIndex {
 	NDOCS=0
 	tries=3
 	while [ $tries -gt 0 ]; do
-		echo "Checking if index $INDEX-paths contains documents"
+		echo $(date)" | Checking if index $INDEX-paths contains documents"
 		response=$(curl -u "$ES_USERNAME:$ES_PASSWORD" -s -X GET "$ES_SERVERS/$INDEX-paths/_count")
 		# echo "Response: $response"
 		error=$(echo $response | jq '.error')
@@ -179,30 +186,32 @@ function updateIndex {
 		if [[ $error == "null" ]]; then
 			NDOCS=$(echo $response | jq '.count')
 			if [[ $NDOCS -gt 0 ]]; then
-				echo "Found $NDOCS documents on index $INDEX-paths"
+				echo $(date)" | -- Found $NDOCS documents on index $INDEX-paths"
 				break;
 			fi
 		else
-			echo "No documents found on index $INDEX-paths"
+			echo $(date)" | -- No documents found on index $INDEX-paths"
 		fi
 		tries=$((tries-1))
-		echo "Waiting 30 seconds before retrying..."
-		sleep 30
+		echo $(date)" | -- Sleeping "$SLEEP" seconds before retrying...";
+		sleep $SLEEP;
 	done
 
 	if [[ $NDOCS -eq 0 ]]; then
-		echo "No documents found on index $INDEX. Skipping..."
-		clean_exit 1
+		echo $(date)" | No documents found on index $INDEX. Skipping..."
+		clean_exit
+		return 1
 	fi
 
 	echo $(date)" | Correlating data from index '$INDEX'"
 	while [ $i -gt 0 ]; do
 		if [[ "$WAIT_FOR_EVENTS" = true ]]; then
-			echo $(date)" | waiting 30s before retry"
-			sleep 30s
+			echo $(date)" | -- Sleeping "$SLEEP" seconds before retrying...";
+			sleep $SLEEP;
 			WAIT_FOR_EVENTS=false
 		fi
-		echo "-------------------------------------"
+
+		echo $(date)" |   -----------------------"
 		if [ $CREAT_POLICY -eq 0 ]; then
 			create_enrich_policies $ES_SERVERS $INDEX
 			CREAT_POLICY=$?
@@ -219,7 +228,7 @@ function updateIndex {
 		update_by_query $ES_SERVERS $INDEX $N_TRIES
 		i=$?
 		if [[ $i -eq 2 && "$WAITING" = true ]] ; then break; fi;
-		echo $(date)" | Sleeping "$SLEEP" seconds ...";
+		echo $(date)" |   -- Sleeping "$SLEEP" seconds before checking for more events...";
 		sleep $SLEEP;
 	done
 
@@ -229,18 +238,19 @@ function updateIndex {
 
 # $1 = elasticsearch url
 # $2 = time to sleep
-# $3 = index name
-function correlate_data {
+# $3 = n_tries
+function correlate_daemon {
 
 	ES_SERVERS=$1
 	SLEEP=$2
 	N_TRIES=$3
+	STOP_ON_DELETE=$4
 
-	echo "ES_SERVERS: $ES_SERVERS, SLEEP: $SLEEP, N_TRIES: $N_TRIES, $4"
+	echo "ES_SERVERS: $ES_SERVERS, SLEEP: $SLEEP, N_TRIES: $N_TRIES, $STOP_ON_DELETE"
 
-	curl -u "dio:diopw" -s -X GET "$ES_SERVERS" > /dev/null
+	curl -u "$ES_USERNAME:$ES_PASSWORD" -s -X GET "$ES_SERVERS" > /dev/null
 	if [ $? -ne 0 ]; then
-		echo "Error: Could not connect to $ES_SERVERS"
+		echo $(date)" | - error: Could not connect to $ES_SERVERS"
 		exit 1
 	fi
 
@@ -252,7 +262,7 @@ function correlate_data {
 	TARGET_DIR=/tmp/dio
 	inotifywait -m $TARGET_DIR -e create,delete -e moved_to |
     while read dir action file; do
-        echo "The file '$file' appeared in directory '$dir' via '$action'"
+        echo $(date)" | The file '$file' appeared in directory '$dir' via '$action'"
 		if [[ $action == "CREATE" ]]; then
 			WAITING=false
 			SESSION_NAME=`cat $TARGET_DIR/$file | awk '{print tolower($0)}'` ;
@@ -260,17 +270,39 @@ function correlate_data {
 			updateIndex
 		elif [[ $action == "DELETE" ]]; then
 			WAITING=true;
-			if [[ "$4" = "true" ]]; then
+			if [[ "$STOP_ON_DELETE" = "true" ]]; then
 				echo "Exiting ..."
-				clean_exit 1
+				clean_exit
 			fi
 		fi
+		echo $(date)" | Waiting for modifications on $TARGET_DIR ...";
 	done
 
 }
 
-function clean_exit {
-  kill $(pgrep inotifywait)
+# $1 = elasticsearch url
+# $2 = index
+function correlate_index {
+
+	echo "Correlating paths for session $2..."
+	ES_SERVERS=$1
+	INDEX="dio_trace_$2"
+	SLEEP=$3
+	N_TRIES=$4
+
+	echo "ES_SERVERS: $ES_SERVERS, INDEX: $INDEX, SLEEP: $SLEEP, N_TRIES: $N_TRIES"
+
+	curl -u "$ES_USERNAME:$ES_PASSWORD" -s -X GET "$ES_SERVERS" > /dev/null
+	if [ $? -ne 0 ]; then
+		echo "Error: Could not connect to $ES_SERVERS"
+		exit 1
+	fi
+
+	updateIndex
 }
 
-correlate_data "${@:2}"
+function clean_exit {
+  kill $(pgrep inotifywait) > /dev/null 2>&1
+}
+
+"$@"

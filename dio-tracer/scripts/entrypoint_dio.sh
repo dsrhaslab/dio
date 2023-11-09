@@ -9,7 +9,7 @@ if ${CORRELATE_PATHS} == "true"; then
         exit 1
     fi
     echo "Starting FPCA..."
-    /usr/share/dio/bin/fpca.sh correlate_fp $ES_SERVERS $SLEEP_TIME $N_TRIES true > /dio_data/fpca.log 2>&1 &
+    /usr/share/dio/bin/fpca.sh correlate_daemon $ES_SERVERS $SLEEP_TIME $N_TRIES true > /dio_data/fpca.log 2>&1 &
     sleep 1s
 fi
 
