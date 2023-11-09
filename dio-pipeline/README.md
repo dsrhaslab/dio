@@ -1,6 +1,30 @@
-# DIO analysis pipeline
+# DIO analysis pipeline (via docker-compose)
 
-Ansible playbook to install and run the DIO analysis pipeline.
+Docker-compose for installing and running DIO's analysis pipeline (local setup).
+
+### Install dependencies
+- docker (v24.0.5)
+- docker-compose (v1.29.2)
+
+### Setup environment
+
+The folder [docker-compose](docker-compose) contains a _docker-compose.yml_ file that configures one docker container for Elasticsearch and another for Kibana, and an _.env_ file that contains important variables for setting up DIO's analysis pipeline.
+
+1. Update the necessary variables in the _.env_ file according to your setup.
+2. Run `docker-compose up`
+3. Ensure that you can access and login into kibana:
+    - Access [http://<HOST_IP>:<KIBANA_PORT>]()
+    - Login in with:
+        - Username: _elastic_
+        - Password: the elastic password defined in .env (e.g., _secret_).
+4. Import DIO's dashboards into Kibana:
+    ```
+    curl -u "elastic:<ELASTIC_PASSWORD>" -X POST -k "http://<HOST_IP>:<KIBANA_PORT>/api/saved_objects/_import" -H "kbn-xsrf: true" --form file=@dio_dashboards.ndjson
+    ```
+
+# DIO analysis pipeline (via Kubernetes)
+
+Ansible playbook for installing and running DIO's analysis pipeline (local or distributed setup).
 
 ## Install ansible and required modules
 
