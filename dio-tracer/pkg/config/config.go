@@ -33,6 +33,7 @@ type TracerConf struct {
 	Consumers            int      `yaml:"number_consumers"        env:"DIO_NUMBER_CONSUMERS"        env-description:"Number of go-routines sending events to writers"`
 	WaitTimeout          int      `yaml:"wait_timeout"            env:"DIO_WAIT_TIMEOUT"            env-description:"Seconds to wait for processing remaining events"`
 	Timeout              int      `yaml:"timeout"                 env:"DIO_TIMEOUT"                 env-description:"Stop tracing after timeout (if no events received)"`
+	PathsMaxJumps		 int 	  `yaml:"paths_max_jumps"         env:"DIO_PATHS_MAX_JUMPS"         env-description:"Maximum number of jumps (directories) for each file path"`
 }
 
 type NopWriterConf struct {
@@ -104,6 +105,12 @@ func initDefaultConfiguration() TConfiguration {
 	cfg.TracerConf.Consumers = 4
 	cfg.TracerConf.WaitTimeout = -1
 	cfg.TracerConf.Timeout = -1
+
+	if utils.CheckKernelVersion() {
+		cfg.TracerConf.PathsMaxJumps = 45
+	} else {
+		cfg.TracerConf.PathsMaxJumps = 25
+	}
 
 	cfg.NopWriterConf.Enabled = false
 

@@ -39,7 +39,7 @@ RUN apt-get install -y vim
 
 WORKDIR /usr/share/dio
 RUN mkdir -p bin conf
-RUN mkdir -p /tmp/dio /dio_data
+RUN mkdir -p /tmp/dio /dio_data dio_data
 
 # Copy DIO Binary
 COPY bin/dio ./bin/

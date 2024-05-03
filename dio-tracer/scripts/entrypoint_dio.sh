@@ -9,12 +9,13 @@ if ${CORRELATE_PATHS} == "true"; then
         exit 1
     fi
     echo "Starting FPCA..."
-    /usr/share/dio/bin/fpca.sh correlate_daemon $ES_SERVERS $SLEEP_TIME $N_TRIES true > /dio_data/fpca.log 2>&1 &
+    /usr/share/dio/bin/fpca.sh correlate_daemon $ES_SERVERS $SLEEP_TIME $N_TRIES true > /usr/share/dio/dio_data/fpca.log 2>&1 &
     sleep 1s
 fi
 
 echo "Starting DIO..."
-exec /usr/share/dio/bin/dio $DIO_OPTIONS -- ${@}
+/usr/share/dio/bin/dio $DIO_OPTIONS -- ${@} & dio_pid=$!
+wait $dio_pid
 
 if ${CORRELATE_PATHS} == "true"; then
     echo "Waiting for FPCA to finish..."

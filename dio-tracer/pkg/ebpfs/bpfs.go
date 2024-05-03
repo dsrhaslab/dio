@@ -103,11 +103,8 @@ func PrepareBpf(conf *config.TConfiguration) (*BpfConf, error) {
 	bpfProgram = strings.Replace(bpfProgram, "//TARGET_PATHS_LEN//", strconv.Itoa(len(conf.TargetPaths)), -1)
 	bpfProgram = strings.Replace(bpfProgram, "//TOTAL_EVENTS//", strconv.Itoa(len(event.SuportedEvents)+1), -1)
 
-	if utils.CheckKernelVersion() {
-		bpfProgram = strings.Replace(bpfProgram, "//MAX_JUMPS//", "45", -1)
-	} else {
-		bpfProgram = strings.Replace(bpfProgram, "//MAX_JUMPS//", "25", -1)
-	}
+	utils.InfoLogger.Printf("PathsMaxJumps: %v\n", conf.PathsMaxJumps)
+	bpfProgram = strings.Replace(bpfProgram, "//MAX_JUMPS//", strconv.Itoa(conf.PathsMaxJumps), -1)
 
 	if conf.TargetCommand != "" {
 		var sb_comm strings.Builder

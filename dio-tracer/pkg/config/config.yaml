@@ -13,7 +13,7 @@ tracer:
   maps_strategy: "one2each"
   perfmap_size: 65536
   show_stats: true
-  stats_path: "dio-stats.json"
+  stats_path: "dio_data/dio-stats.json"
   number_consumers: 4
   wait_timeout: -1
 
@@ -22,7 +22,7 @@ output:
     enabled: false
   file_writer:
     enabled: true
-    filename: "dio-trace.json"
+    filename: "dio_data/dio-trace.json"
   elasticsearch_writer:
     enabled: false
     servers: ["http://localhost:31111"]
@@ -35,8 +35,8 @@ logger:
   debug_mode: false
   log2stdout: true
   log2file: true
-  log_filename: "dio-log.txt"
+  log_filename: "dio_data/dio-log.txt"
   profiling_on: false
-  profiling_result: "dio-profiling.txt"
+  profiling_result: "dio_data/dio-profiling.txt"
   save_timestamps: false
-  profiling_times_result: "dio-profiling-times.txt"
+  profiling_times_result: "dio_data/dio-profiling-times.txt"

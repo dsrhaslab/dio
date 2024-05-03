@@ -19,9 +19,20 @@ import (
 
 var Version = "development"
 
+// convert types take an int and return a string value.
+type callback func()
+
 func checkError(err error) {
 	if err != nil {
+		fmt.Errorf("Error:", err.Error())
+		os.Exit(2)
+	}
+}
+
+func checkErrorWithCallback(err error, fn callback) {
+	if err != nil {
 		fmt.Println(err.Error())
+		fn()
 		os.Exit(2)
 	}
 }
@@ -102,7 +113,9 @@ func start_target_program(args []string) {
 	var cmdName = args[0]
 
 	cmd, err := exec.LookPath(cmdName)
-	checkError(err)
+	checkErrorWithCallback(err, func() {
+		syscall.Kill(-syscall.Getppid(), syscall.SIGTERM)
+	})
 
 	// Set up channel on which to send signal notifications.
 	// We must use a buffered channel or risk missing the signal
