@@ -7,9 +7,11 @@ It is designed to be used by applications developers and users to understand how
 
 By combining system call tracing with a customizable data analysis and visualization pipeline, DIO provide non-intrusive and comprehensive I/O diagnosis for applications using in-kernel POSIX storage systems (e.g., ext4, linux block device).
 
-DIO's website: https://dio-tool.netlify.app
+More information at DIO's website: https://dio-tool.netlify.app
 
+<!--
 ## Features
+
 
 * **Generic and non-intrusive**: DIO can be used to observe I/O system calls made by any application interacting with in-kernel storage systems without requiring any modification to the application code.
 
@@ -185,7 +187,7 @@ Diagnosis of inefficient use of system calls that lead to poor storage performan
 
 #### Elasticsearch
 Observation of unexpected file access patterns caused by the usage of high-level libraries that lead to redundant I/O calls. The full description, how to reproduce and the resulting visual representations can be consulted [here](https://dio-tool.netlify.app/use-cases/elasticsearch).
-
+-->
 <!-- ## Additional information
 **Publications about DIO.**
 You can find [here](.docs/publications.md) a list of publications that extend, improve, and use DIO.
