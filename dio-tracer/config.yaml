@@ -1,0 +1,11 @@
+tracer:
+  events: [openat, read, write, close]
+  target_pids: []
+  target_tids: []
+  discard_errors: false
+  discard_directories: false
+  duration: 0
+output:
+  file_writer:
+    enabled: true
+    filename: "-"

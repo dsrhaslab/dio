@@ -1,4 +1,0 @@
----
-dependencies:
-  - { role: tests/common }
-  - { role: tests/rocksdb/setup_env, setup: dio }

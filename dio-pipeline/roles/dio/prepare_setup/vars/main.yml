@@ -1,5 +1,0 @@
----
-dio_required_packages:
-  - "openshift"
-  - "pyyaml"
-  - "kubernetes"
