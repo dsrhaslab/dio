@@ -120,7 +120,7 @@ int main(int argc, char **argv)
         {skel->progs.enter_write, skel->progs.exit_write, cfg.write},
         {skel->progs.enter_close, skel->progs.exit_close, cfg.close}
     };
-    for (unsigned i = 0; i < 4; i++) {
+    for (unsigned i = 0; i < sizeof(syscalls) / sizeof(syscalls[0]); i++) {
         if (bpf_program__set_autoload(syscalls[i].enter, syscalls[i].enabled) != 0 ||
             bpf_program__set_autoload(syscalls[i].exit, syscalls[i].enabled) != 0) {
             fprintf(stderr, "Nao consegui selecionar as syscalls\n");
@@ -143,7 +143,7 @@ int main(int argc, char **argv)
         goto cleanup;
     }
     const char *output = cfg.output[0] == '\0' ? NULL : cfg.output;
-    if (dio_writer_open(&writer, output, bpf_map__fd(skel->maps.percpu_array_files), cpus) != 0) {
+    if (dio_writer_open(&writer, output, bpf_map__fd(skel->maps.percpu_array_files), cpus, cfg.session_name) != 0) {
         perror("abrir output");
         goto cleanup;
     }

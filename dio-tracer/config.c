@@ -81,7 +81,8 @@ static int list(struct config *cfg, const char *name, const char *text)
         }
         char *end = item + strlen(item);
         while (end > item && isspace((unsigned char)end[-1])) {
-            *--end = '\0';
+            end--;
+            *end = '\0';
         }
         if (events) {
             if (strcmp(item, "all") == 0) {
@@ -113,7 +114,8 @@ static int list(struct config *cfg, const char *name, const char *text)
                 if (*count == MAX_TARGETS) {
                     return fail(name, "limite de 256 alvos excedido");
                 }
-                ids[(*count)++] = id;
+                ids[*count] = id;
+                (*count)++;
             }
         }
     }
@@ -135,8 +137,18 @@ static int apply(struct config *cfg, const char *name, const char *text)
     if (strcmp(name, "tracer.duration") == 0) {
         return number(name, text, UINT_MAX, &cfg->duration);
     }
+    if (strcmp(name, "tracer.session_name") == 0) {
+        if (strlen(text) >= sizeof(cfg->session_name)) {
+            return fail(name, "nome de sessão demasiado longo");
+        }
+        strcpy(cfg->session_name, text);
+        return 0;
+    }
     if (strcmp(name, "output.file_writer.enabled") == 0) {
-        return strcmp(text, "true") == 0 ? 0 : fail(name, "só true é suportado");
+        if (strcmp(text, "true") != 0) {
+            return fail(name, "só true é suportado");
+        }
+        return 0;
     }
     if (strcmp(name, "output.file_writer.filename") == 0) {
         if (strlen(text) >= sizeof(cfg->output)) {
@@ -164,8 +176,8 @@ static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node
         return fail(name, "estrutura YAML inválida");
     }
     if (node->type == YAML_MAPPING_NODE) {
-        if (*name && strcmp(name, "tracer") && strcmp(name, "output") &&
-            strcmp(name, "output.file_writer")) {
+        if (*name != '\0' && strcmp(name, "tracer") != 0 && strcmp(name, "output") != 0 &&
+            strcmp(name, "output.file_writer") != 0) {
             return fail(name, "grupo desconhecido ou valor esperado");
         }
         for (yaml_node_pair_t *p = node->data.mapping.pairs.start;
@@ -181,7 +193,7 @@ static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node
                 }
             }
             char child[128];
-            int length = snprintf(child, sizeof(child), "%s%s%s", name, *name ? "." : "", key);
+            int length = snprintf(child, sizeof(child), "%s%s%s", name, *name != '\0' ? "." : "", key);
             if (length < 0 || (size_t)length >= sizeof(child)) {
                 return fail(name, "chave YAML demasiado longa");
             }
@@ -192,8 +204,8 @@ static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node
         return 0;
     }
     if (node->type == YAML_SEQUENCE_NODE) {
-        if (strcmp(name, "tracer.events") && strcmp(name, "tracer.target_pids") &&
-            strcmp(name, "tracer.target_tids")) {
+        if (strcmp(name, "tracer.events") != 0 && strcmp(name, "tracer.target_pids") != 0 &&
+            strcmp(name, "tracer.target_tids") != 0) {
             return fail(name, "lista inesperada");
         }
         char text[4096] = "";
@@ -201,14 +213,14 @@ static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node
         for (yaml_node_item_t *p = node->data.sequence.items.start;
              p < node->data.sequence.items.top; p++) {
             const char *item = scalar(yaml_document_get_node(doc, *p));
-            if (item == NULL || *item == '\0' || strchr(item, ',')) {
+            if (item == NULL || *item == '\0' || strchr(item, ',') != NULL) {
                 return fail(name, "elemento da lista inválido");
             }
             size_t length = strlen(item);
             if (used + length + 2 > sizeof(text)) {
                 return fail(name, "lista demasiado longa");
             }
-            if (used) {
+            if (used > 0) {
                 text[used++] = ',';
             }
             memcpy(text + used, item, length + 1);
@@ -217,7 +229,10 @@ static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node
         return apply(cfg, name, text);
     }
     const char *text = scalar(node);
-    return text == NULL ? fail(name, "valor YAML inválido") : apply(cfg, name, text);
+    if (text == NULL) {
+        return fail(name, "valor YAML inválido");
+    }
+    return apply(cfg, name, text);
 }
 
 static int read_yaml(struct config *cfg, const char *filename)
@@ -265,7 +280,8 @@ static void usage(const char *program)
          "  --duration SEGUNDOS            zero não impõe limite de duração\n"
          "  --discard-errors true|false    default: false\n"
          "  --discard-directories true|false  default: false\n"
-         "  --output FICHEIRO              texto; substitui o ficheiro; '-' usa stdout\n"
+         "  --output FICHEIRO              JSON; substitui o ficheiro; '-' usa stdout\n"
+         "  --session-name NOME           nome da sessão no JSON\n"
          "  --help                         mostra esta ajuda\n"
          "Precedência: defaults < YAML < CLI. Sem --output, usa stdout. Ctrl+C termina.");
 }
@@ -281,6 +297,7 @@ int config_read(struct config *cfg, int argc, char **argv)
         {"discard-errors", required_argument, NULL, 'E'},
         {"discard-directories", required_argument, NULL, 'D'},
         {"output", required_argument, NULL, 'o'},
+        {"session-name", required_argument, NULL, 's'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0}
     };
@@ -322,6 +339,7 @@ int config_read(struct config *cfg, int argc, char **argv)
         case 'E': name = "tracer.discard_errors"; break;
         case 'D': name = "tracer.discard_directories"; break;
         case 'o': name = "output.file_writer.filename"; break;
+        case 's': name = "tracer.session_name"; break;
         default: break;
         }
         if (name != NULL && apply(cfg, name, optarg) != 0) {

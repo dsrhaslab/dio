@@ -19,6 +19,7 @@ struct config {
     bool discard_directories;
     unsigned duration;
     char output[4096];
+    char session_name[128];
 };
 
 // 0: pronto; 1: ajuda apresentada; -1: configuração inválida.

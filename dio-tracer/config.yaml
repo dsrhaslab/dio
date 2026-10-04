@@ -5,6 +5,7 @@ tracer:
   discard_errors: false
   discard_directories: false
   duration: 0
+  session_name: ""
 output:
   file_writer:
     enabled: true

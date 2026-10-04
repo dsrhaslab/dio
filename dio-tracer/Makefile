@@ -16,7 +16,7 @@ build/dio.skel.h: build/dio.bpf.o
 	mv build/dio.skel.h.tmp build/dio.skel.h
 
 build/dio: main.c config.c writer.c config.h writer.h dio.h build/dio.skel.h
-	cc -O2 -g -std=c11 -Wall -Wextra -Werror -I. -Ibuild main.c config.c writer.c -o build/dio -lbpf -lyaml
+	cc -O2 -g -std=c11 -Wall -Wextra -Werror -I. -Ibuild main.c config.c writer.c -o build/dio -lbpf -lyaml -lyyjson
 
 clean:
 	rm -rf build

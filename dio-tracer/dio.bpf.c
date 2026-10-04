@@ -121,7 +121,7 @@ static __always_inline void init_header(struct dio_header *header, __u32 event_i
     header->flags = flags;
 }
 
-static __always_inline void fill_base(struct dio_base *base, __u64 call_ns, __s64 retval)
+static __always_inline void fill_base(struct dio_base *base, __u64 call_ns, __u64 return_ns, __s64 retval)
 {
     __u64 pid_tid = bpf_get_current_pid_tgid();
     struct task_struct *task = (void *)bpf_get_current_task();
@@ -130,7 +130,7 @@ static __always_inline void fill_base(struct dio_base *base, __u64 call_ns, __s6
     base->pid = pid_tid >> 32;
     base->ppid = BPF_CORE_READ(task, real_parent, tgid);
     base->call_ns = call_ns;
-    base->return_ns = bpf_ktime_get_ns();
+    base->return_ns = return_ns;
     base->retval = retval;
     bpf_get_current_comm(base->comm, sizeof(base->comm));
     base->cpu = bpf_get_smp_processor_id();
@@ -412,6 +412,7 @@ int enter_openat(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_openat")
 int exit_openat(struct trace_event_raw_sys_exit *ctx)
 {
+    __u64 return_ns = bpf_ktime_get_ns();
     const volatile __s64 retval = ctx->ret;
     struct dio_key key = {
         .event_id = DIO_OPENAT,
@@ -441,7 +442,7 @@ int exit_openat(struct trace_event_raw_sys_exit *ctx)
     }
 
     init_header(&event.header, DIO_OPENAT, snapshot.flags & DIO_F_IDENTITY);
-    fill_base(&event.base, args.call_ns, retval);
+    fill_base(&event.base, args.call_ns, return_ns, retval);
     event.file = snapshot.file;
     event.flags = args.flags;
     event.mode = args.mode;
@@ -478,6 +479,7 @@ int enter_read(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_read")
 int exit_read(struct trace_event_raw_sys_exit *ctx)
 {
+    __u64 return_ns = bpf_ktime_get_ns();
     const volatile __s64 retval = ctx->ret;
     struct dio_key key = {
         .event_id = DIO_READ,
@@ -500,7 +502,7 @@ int exit_read(struct trace_event_raw_sys_exit *ctx)
     }
 
     init_header(&event.header, DIO_READ, args.snapshot.flags);
-    fill_base(&event.base, args.call_ns, retval);
+    fill_base(&event.base, args.call_ns, return_ns, retval);
     event.file = args.snapshot.file;
     event.file_type = args.snapshot.file_type;
     event.bytes_requested = args.bytes_requested;
@@ -538,6 +540,7 @@ int enter_write(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_write")
 int exit_write(struct trace_event_raw_sys_exit *ctx)
 {
+    __u64 return_ns = bpf_ktime_get_ns();
     const volatile __s64 retval = ctx->ret;
     struct dio_key key = {
         .event_id = DIO_WRITE,
@@ -560,7 +563,7 @@ int exit_write(struct trace_event_raw_sys_exit *ctx)
     }
 
     init_header(&event.header, DIO_WRITE, args.snapshot.flags);
-    fill_base(&event.base, args.call_ns, retval);
+    fill_base(&event.base, args.call_ns, return_ns, retval);
     event.file = args.snapshot.file;
     event.file_type = args.snapshot.file_type;
     event.bytes_requested = args.bytes_requested;
@@ -596,6 +599,7 @@ int enter_close(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_close")
 int exit_close(struct trace_event_raw_sys_exit *ctx)
 {
+    __u64 return_ns = bpf_ktime_get_ns();
     const volatile __s64 retval = ctx->ret;
     struct dio_key key = {
         .event_id = DIO_CLOSE,
@@ -618,7 +622,7 @@ int exit_close(struct trace_event_raw_sys_exit *ctx)
     }
 
     init_header(&event.header, DIO_CLOSE, args.snapshot.flags & DIO_F_IDENTITY);
-    fill_base(&event.base, args.call_ns, retval);
+    fill_base(&event.base, args.call_ns, return_ns, retval);
     event.file = args.snapshot.file;
 
     emit(&event, sizeof(event));
