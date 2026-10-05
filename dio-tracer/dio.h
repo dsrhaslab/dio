@@ -14,7 +14,9 @@ enum dio_event_id {
     DIO_PATH = 1,
     DIO_OPENAT = 7,
     DIO_READ = 8,
+    DIO_PREAD64 = 9,
     DIO_WRITE = 11,
+    DIO_PWRITE64 = 12,
     DIO_CLOSE = 14,
 };
 

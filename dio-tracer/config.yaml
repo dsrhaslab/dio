@@ -1,5 +1,5 @@
 tracer:
-  events: [openat, read, write, close]
+  events: [openat, read, write, close, pread64, pwrite64]
   target_pids: []
   target_tids: []
   discard_errors: false

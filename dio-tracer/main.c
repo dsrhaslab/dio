@@ -118,7 +118,9 @@ int main(int argc, char **argv)
         {skel->progs.enter_openat, skel->progs.exit_openat, cfg.openat},
         {skel->progs.enter_read, skel->progs.exit_read, cfg.read},
         {skel->progs.enter_write, skel->progs.exit_write, cfg.write},
-        {skel->progs.enter_close, skel->progs.exit_close, cfg.close}
+        {skel->progs.enter_close, skel->progs.exit_close, cfg.close},
+        {skel->progs.enter_pread64, skel->progs.exit_pread64, cfg.pread64},
+        {skel->progs.enter_pwrite64, skel->progs.exit_pwrite64, cfg.pwrite64}
     };
     for (unsigned i = 0; i < sizeof(syscalls) / sizeof(syscalls[0]); i++) {
         if (bpf_program__set_autoload(syscalls[i].enter, syscalls[i].enabled) != 0 ||

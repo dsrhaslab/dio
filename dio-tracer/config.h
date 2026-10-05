@@ -15,6 +15,8 @@ struct config {
     bool read;
     bool write;
     bool close;
+    bool pread64;
+    bool pwrite64;
     bool discard_errors;
     bool discard_directories;
     unsigned duration;

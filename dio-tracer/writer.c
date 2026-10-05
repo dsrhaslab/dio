@@ -324,15 +324,23 @@ int dio_writer_record(void *context, void *data, size_t size)
             snprintf(mode, sizeof(mode), "%#3o", (unsigned)event.mode);
             ok = ok && yyjson_mut_obj_add_strcpy(doc, args, "mode", mode);
         }
-    } else if ((header.event_id == DIO_READ || header.event_id == DIO_WRITE) && size == sizeof(struct dio_data_event)) {
+    } else if ((header.event_id == DIO_READ || header.event_id == DIO_WRITE ||
+                header.event_id == DIO_PREAD64 || header.event_id == DIO_PWRITE64) && size == sizeof(struct dio_data_event)) {
         struct dio_data_event event;
         memcpy(&event, data, sizeof(event));
-        const char *name = header.event_id == DIO_READ ? "read" : "write";
+        const char *name;
+        switch (header.event_id) {
+        case DIO_READ: name = "read"; break;
+        case DIO_WRITE: name = "write"; break;
+        case DIO_PREAD64: name = "pread64"; break;
+        default: name = "pwrite64"; break;
+        }
         result = add_context(writer, doc, object, name, "data", &event.base, &event.file, header.flags);
         ok = result == 0 &&
             yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd) &&
             yyjson_mut_obj_add_uint(doc, args, "bytes_requested", event.bytes_requested);
-        if ((header.flags & DIO_F_OFFSET) && event.offset != -1) {
+        if ((header.flags & DIO_F_OFFSET) &&
+            (event.offset != -1 || header.event_id == DIO_PREAD64 || header.event_id == DIO_PWRITE64)) {
             ok = ok && yyjson_mut_obj_add_sint(doc, args, "offset", event.offset);
         }
     } else if (header.event_id == DIO_CLOSE && size == sizeof(struct dio_close_event)) {

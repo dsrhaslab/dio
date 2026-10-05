@@ -60,7 +60,7 @@ static int list(struct config *cfg, const char *name, const char *text)
     }
     strcpy(buffer, text);
     if (events) {
-        cfg->openat = cfg->read = cfg->write = cfg->close = false;
+        cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = false;
     } else {
         *count = 0;
         if (*text == '\0') {
@@ -86,7 +86,7 @@ static int list(struct config *cfg, const char *name, const char *text)
         }
         if (events) {
             if (strcmp(item, "all") == 0) {
-                cfg->openat = cfg->read = cfg->write = cfg->close = true;
+                cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = true;
             } else if (strcmp(item, "openat") == 0) {
                 cfg->openat = true;
             } else if (strcmp(item, "read") == 0) {
@@ -95,8 +95,12 @@ static int list(struct config *cfg, const char *name, const char *text)
                 cfg->write = true;
             } else if (strcmp(item, "close") == 0) {
                 cfg->close = true;
+            } else if (strcmp(item, "pread64") == 0) {
+                cfg->pread64 = true;
+            } else if (strcmp(item, "pwrite64") == 0) {
+                cfg->pwrite64 = true;
             } else {
-                return fail(name, "usa openat, read, write, close ou all; não deixes elementos vazios");
+                return fail(name, "usa openat, read, write, close, pread64, pwrite64 ou all; não deixes elementos vazios");
             }
         } else {
             unsigned id;
@@ -276,7 +280,7 @@ static void usage(const char *program)
     puts("  --config FICHEIRO              configuração YAML\n"
          "  --pid PID[,PID...]              PIDs a observar\n"
          "  --tid TID[,TID...]              TIDs têm prioridade sobre PIDs\n"
-         "  --events LISTA                 openat,read,write,close ou all (default: all)\n"
+         "  --events LISTA                 openat,read,write,close,pread64,pwrite64 ou all (default: all)\n"
          "  --duration SEGUNDOS            zero não impõe limite de duração\n"
          "  --discard-errors true|false    default: false\n"
          "  --discard-directories true|false  default: false\n"
@@ -302,7 +306,7 @@ int config_read(struct config *cfg, int argc, char **argv)
         {NULL, 0, NULL, 0}
     };
     memset(cfg, 0, sizeof(*cfg));
-    cfg->openat = cfg->read = cfg->write = cfg->close = true;
+    cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = true;
     const char *filename = NULL;
     int option;
     opterr = 0;

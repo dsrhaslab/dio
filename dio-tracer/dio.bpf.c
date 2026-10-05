@@ -451,11 +451,10 @@ int exit_openat(struct trace_event_raw_sys_exit *ctx)
     return 0;
 }
 
-SEC("tracepoint/syscalls/sys_enter_read")
-int enter_read(struct trace_event_raw_sys_enter *ctx)
+static __always_inline int enter_data(struct trace_event_raw_sys_enter *ctx, __u32 event_id, bool explicit_offset)
 {
     struct dio_key key = {
-        .event_id = DIO_READ,
+        .event_id = event_id,
         .tid = (__u32)bpf_get_current_pid_tgid()
     };
     struct data_args args = {};
@@ -465,112 +464,101 @@ int enter_read(struct trace_event_raw_sys_enter *ctx)
     }
 
     args.call_ns = bpf_ktime_get_ns();
-
     args.snapshot.file.fd = ctx->args[0];
     args.bytes_requested = ctx->args[2];
 
     snapshot_fd(&args.snapshot, args.call_ns);
+    if (explicit_offset) {
+        // pread/pwrite recebem o offset mesmo quando o fd e invalido.
+        args.snapshot.offset = (__s64)ctx->args[3];
+        args.snapshot.flags |= DIO_F_OFFSET;
+    }
 
     bpf_map_update_elem(&entry_data_buf_args, &key, &args, BPF_ANY);
-
     return 0;
+}
+
+static __always_inline int exit_data(struct trace_event_raw_sys_exit *ctx, __u32 event_id)
+{
+    __u64 return_ns = bpf_ktime_get_ns();
+    const volatile __s64 retval = ctx->ret;
+    struct dio_key key = {
+        .event_id = event_id,
+        .tid = (__u32)bpf_get_current_pid_tgid()
+    };
+    struct data_args *pending = bpf_map_lookup_elem(&entry_data_buf_args, &key);
+    struct data_args args;
+    struct dio_data_event event = {};
+
+    if (!pending) {
+        return 0;
+    }
+
+    // copia antes de apagar
+    args = *pending;
+    bpf_map_delete_elem(&entry_data_buf_args, &key);
+
+    if (args.snapshot.discarded || (skip_errors && retval < 0)) {
+        return 0;
+    }
+
+    init_header(&event.header, event_id, args.snapshot.flags);
+    fill_base(&event.base, args.call_ns, return_ns, retval);
+    event.file = args.snapshot.file;
+    event.file_type = args.snapshot.file_type;
+    event.bytes_requested = args.bytes_requested;
+    event.offset = args.snapshot.offset;
+
+    emit(&event, sizeof(event));
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_read")
+int enter_read(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_data(ctx, DIO_READ, false);
 }
 
 SEC("tracepoint/syscalls/sys_exit_read")
 int exit_read(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 return_ns = bpf_ktime_get_ns();
-    const volatile __s64 retval = ctx->ret;
-    struct dio_key key = {
-        .event_id = DIO_READ,
-        .tid = (__u32)bpf_get_current_pid_tgid()
-    };
-    struct data_args *pending = bpf_map_lookup_elem(&entry_data_buf_args, &key);
-    struct data_args args;
-    struct dio_data_event event = {};
-
-    if (!pending) {
-        return 0;
-    }
-
-    // copia antes de apagar
-    args = *pending;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
-
-    if (args.snapshot.discarded || (skip_errors && retval < 0)) {
-        return 0;
-    }
-
-    init_header(&event.header, DIO_READ, args.snapshot.flags);
-    fill_base(&event.base, args.call_ns, return_ns, retval);
-    event.file = args.snapshot.file;
-    event.file_type = args.snapshot.file_type;
-    event.bytes_requested = args.bytes_requested;
-    event.offset = args.snapshot.offset;
-
-    emit(&event, sizeof(event));
-    return 0;
+    return exit_data(ctx, DIO_READ);
 }
 
 SEC("tracepoint/syscalls/sys_enter_write")
 int enter_write(struct trace_event_raw_sys_enter *ctx)
 {
-    struct dio_key key = {
-        .event_id = DIO_WRITE,
-        .tid = (__u32)bpf_get_current_pid_tgid()
-    };
-    struct data_args args = {};
-
-    if (!accepting || !selected_task()) {
-        return 0;
-    }
-
-    args.call_ns = bpf_ktime_get_ns();
-
-    args.snapshot.file.fd = ctx->args[0];
-    args.bytes_requested = ctx->args[2];
-
-    snapshot_fd(&args.snapshot, args.call_ns);
-
-    bpf_map_update_elem(&entry_data_buf_args, &key, &args, BPF_ANY);
-
-    return 0;
+    return enter_data(ctx, DIO_WRITE, false);
 }
 
 SEC("tracepoint/syscalls/sys_exit_write")
 int exit_write(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 return_ns = bpf_ktime_get_ns();
-    const volatile __s64 retval = ctx->ret;
-    struct dio_key key = {
-        .event_id = DIO_WRITE,
-        .tid = (__u32)bpf_get_current_pid_tgid()
-    };
-    struct data_args *pending = bpf_map_lookup_elem(&entry_data_buf_args, &key);
-    struct data_args args;
-    struct dio_data_event event = {};
+    return exit_data(ctx, DIO_WRITE);
+}
 
-    if (!pending) {
-        return 0;
-    }
+SEC("tracepoint/syscalls/sys_enter_pread64")
+int enter_pread64(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_data(ctx, DIO_PREAD64, true);
+}
 
-    // copia antes de apagar
-    args = *pending;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
+SEC("tracepoint/syscalls/sys_exit_pread64")
+int exit_pread64(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_data(ctx, DIO_PREAD64);
+}
 
-    if (args.snapshot.discarded || (skip_errors && retval < 0)) {
-        return 0;
-    }
+SEC("tracepoint/syscalls/sys_enter_pwrite64")
+int enter_pwrite64(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_data(ctx, DIO_PWRITE64, true);
+}
 
-    init_header(&event.header, DIO_WRITE, args.snapshot.flags);
-    fill_base(&event.base, args.call_ns, return_ns, retval);
-    event.file = args.snapshot.file;
-    event.file_type = args.snapshot.file_type;
-    event.bytes_requested = args.bytes_requested;
-    event.offset = args.snapshot.offset;
-
-    emit(&event, sizeof(event));
-    return 0;
+SEC("tracepoint/syscalls/sys_exit_pwrite64")
+int exit_pwrite64(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_data(ctx, DIO_PWRITE64);
 }
 
 SEC("tracepoint/syscalls/sys_enter_close")
@@ -640,7 +628,13 @@ int thread_exit(void *ctx)
     key.event_id = DIO_READ;
     bpf_map_delete_elem(&entry_data_buf_args, &key);
 
+    key.event_id = DIO_PREAD64;
+    bpf_map_delete_elem(&entry_data_buf_args, &key);
+
     key.event_id = DIO_WRITE;
+    bpf_map_delete_elem(&entry_data_buf_args, &key);
+
+    key.event_id = DIO_PWRITE64;
     bpf_map_delete_elem(&entry_data_buf_args, &key);
 
     key.event_id = DIO_CLOSE;
