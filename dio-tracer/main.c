@@ -35,15 +35,40 @@ static bool targets_alive(const struct config *cfg)
 {
     const uint32_t *ids = cfg->pids;
     unsigned count = cfg->nr_pids;
+    bool filter_tid = cfg->nr_tids > 0;
 
-    if (cfg->nr_tids > 0) {
+    if (filter_tid) {
         ids = cfg->tids;
         count = cfg->nr_tids;
     }
     for (unsigned i = 0; i < count; i++) {
         char path[64];
-        snprintf(path, sizeof(path), "/proc/%u", ids[i]);
-        if (access(path, F_OK) == 0 || errno != ENOENT) {
+        snprintf(path, sizeof(path), "/proc/%u/status", ids[i]);
+        FILE *status = fopen(path, "r");
+        if (status == NULL) {
+            if (errno != ENOENT && errno != ESRCH) {
+                return true;
+            }
+            continue;
+        }
+
+        char line[256];
+        char state = 0;
+        unsigned threads = 0;
+        while (fgets(line, sizeof(line), status) != NULL) {
+            if (sscanf(line, "State: %c", &state) == 1) {
+                continue;
+            }
+            if (sscanf(line, "Threads: %u", &threads) == 1) {
+                break;
+            }
+        }
+        fclose(status);
+        if (state != 'Z' && state != 'X') {
+            return true;
+        }
+        // a thread principal pode ter terminado e ainda haver outras a correr
+        if (!filter_tid && threads > 1) {
             return true;
         }
     }
@@ -78,7 +103,7 @@ int main(int argc, char **argv)
         return result < 0 ? 2 : 0;
     }
     if (!targets_alive(&cfg)) {
-        fprintf(stderr, "Nenhum PID/TID indicado existe\n");
+        fprintf(stderr, "Nenhum PID/TID indicado esta ativo\n");
         return 1;
     }
 

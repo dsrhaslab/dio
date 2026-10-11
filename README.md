@@ -49,7 +49,7 @@ O YAML de exemplo deixa os alvos vazios. É obrigatório indicar pelo menos um P
 
 A prioridade é defaults < YAML < CLI. O YAML só é lido com --config. As seis syscalls estão ativas por defeito. --events openat,close seleciona eventos, --duration 20 limita a duração e --output /tmp/dio-trace.json escreve JSON num ficheiro, substituindo o conteúdo anterior.
 Sem essa opção, a saída vai para stdout. --session-name teste dá um nome à sessão; se não for indicado, é gerado um nome. Também pode ser definido no YAML em tracer.session_name.
-As restantes opções estão em ./dio-tracer/build/dio --help. Ctrl+C termina o tracer e fecha o array JSON. Também termina quando os alvos desaparecem.
+As restantes opções estão em ./dio-tracer/build/dio --help. Ctrl+C termina o tracer e fecha o array JSON. Também termina quando todos os alvos desaparecem ou ficam zombies. Se estiver a observar um PID e ainda houver outras threads desse processo a correr, continua a captura.
 
 As mensagens como DIO ready vão para stderr, para não ficarem misturadas com o JSON. O ficheiro só tem o array completo depois de o tracer terminar.
 
@@ -84,4 +84,4 @@ O teste deixa /tmp/dio-demo.db, /tmp/dio-demo.txt e /tmp/dio-trace.json. Depois 
 
 Tem funcionado nos testes feitos até agora, mas ainda falta testar melhor com mais eventos e situações diferentes. Podem faltar eventos ou caminhos e ainda não há contadores para perceber essas perdas. A parte de obter os caminhos e identificar os ficheiros também tem limites e precisa de mais testes.
 
-Ao parar o tracer podem ficar chamadas por registar. Se terminar à força ou houver um erro de escrita, o JSON pode ficar incompleto. Também pode continuar à espera mesmo depois de o processo observado terminar. Nesse caso usa-se Ctrl+C, ou define-se --duration ao iniciar o tracer.
+Ao parar o tracer podem ficar chamadas por registar. Se terminar à força ou houver um erro de escrita, o JSON pode ficar incompleto.
