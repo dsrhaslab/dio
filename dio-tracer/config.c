@@ -61,6 +61,7 @@ static int list(struct config *cfg, const char *name, const char *text)
     strcpy(buffer, text);
     if (events) {
         cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = false;
+        cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = false;
     } else {
         *count = 0;
         if (*text == '\0') {
@@ -87,6 +88,7 @@ static int list(struct config *cfg, const char *name, const char *text)
         if (events) {
             if (strcmp(item, "all") == 0) {
                 cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = true;
+                cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = true;
             } else if (strcmp(item, "openat") == 0) {
                 cfg->openat = true;
             } else if (strcmp(item, "read") == 0) {
@@ -99,8 +101,16 @@ static int list(struct config *cfg, const char *name, const char *text)
                 cfg->pread64 = true;
             } else if (strcmp(item, "pwrite64") == 0) {
                 cfg->pwrite64 = true;
+            } else if (strcmp(item, "readv") == 0) {
+                cfg->readv = true;
+            } else if (strcmp(item, "writev") == 0) {
+                cfg->writev = true;
+            } else if (strcmp(item, "fsync") == 0) {
+                cfg->fsync = true;
+            } else if (strcmp(item, "fdatasync") == 0) {
+                cfg->fdatasync = true;
             } else {
-                return fail(name, "usa openat, read, write, close, pread64, pwrite64 ou all; não deixes elementos vazios");
+                return fail(name, "usa openat, read, write, close, pread64, pwrite64, readv, writev, fsync, fdatasync ou all; não deixes elementos vazios");
             }
         } else {
             unsigned id;
@@ -137,6 +147,9 @@ static int apply(struct config *cfg, const char *name, const char *text)
     }
     if (strcmp(name, "tracer.discard_directories") == 0) {
         return boolean(name, text, &cfg->discard_directories);
+    }
+    if (strcmp(name, "tracer.show_stats") == 0) {
+        return boolean(name, text, &cfg->show_stats);
     }
     if (strcmp(name, "tracer.duration") == 0) {
         return number(name, text, UINT_MAX, &cfg->duration);
@@ -280,10 +293,11 @@ static void usage(const char *program)
     puts("  --config FICHEIRO              configuração YAML\n"
          "  --pid PID[,PID...]              PIDs a observar\n"
          "  --tid TID[,TID...]              TIDs têm prioridade sobre PIDs\n"
-         "  --events LISTA                 openat,read,write,close,pread64,pwrite64 ou all (default: all)\n"
+         "  --events LISTA                 openat,read,write,close,pread64,pwrite64,readv,writev,fsync,fdatasync ou all (default: all)\n"
          "  --duration SEGUNDOS            zero não impõe limite de duração\n"
          "  --discard-errors true|false    default: false\n"
          "  --discard-directories true|false  default: false\n"
+         "  --show-stats true|false        contadores no stderr (default: false)\n"
          "  --output FICHEIRO              JSON; substitui o ficheiro; '-' usa stdout\n"
          "  --session-name NOME           nome da sessão no JSON\n"
          "  --help                         mostra esta ajuda\n"
@@ -300,6 +314,7 @@ int config_read(struct config *cfg, int argc, char **argv)
         {"duration", required_argument, NULL, 'd'},
         {"discard-errors", required_argument, NULL, 'E'},
         {"discard-directories", required_argument, NULL, 'D'},
+        {"show-stats", required_argument, NULL, 'S'},
         {"output", required_argument, NULL, 'o'},
         {"session-name", required_argument, NULL, 's'},
         {"help", no_argument, NULL, 'h'},
@@ -307,6 +322,7 @@ int config_read(struct config *cfg, int argc, char **argv)
     };
     memset(cfg, 0, sizeof(*cfg));
     cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = true;
+    cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = true;
     const char *filename = NULL;
     int option;
     opterr = 0;
@@ -342,6 +358,7 @@ int config_read(struct config *cfg, int argc, char **argv)
         case 'd': name = "tracer.duration"; break;
         case 'E': name = "tracer.discard_errors"; break;
         case 'D': name = "tracer.discard_directories"; break;
+        case 'S': name = "tracer.show_stats"; break;
         case 'o': name = "output.file_writer.filename"; break;
         case 's': name = "tracer.session_name"; break;
         default: break;

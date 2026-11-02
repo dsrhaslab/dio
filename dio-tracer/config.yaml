@@ -1,9 +1,10 @@
 tracer:
-  events: [openat, read, write, close, pread64, pwrite64]
+  events: [openat, read, write, close, pread64, pwrite64, readv, writev, fsync, fdatasync]
   target_pids: []
   target_tids: []
   discard_errors: false
   discard_directories: false
+  show_stats: false
   duration: 0
   session_name: ""
 output:

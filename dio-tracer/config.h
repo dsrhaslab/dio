@@ -17,6 +17,11 @@ struct config {
     bool close;
     bool pread64;
     bool pwrite64;
+    bool readv;
+    bool writev;
+    bool fsync;
+    bool fdatasync;
+    bool show_stats;
     bool discard_errors;
     bool discard_directories;
     unsigned duration;

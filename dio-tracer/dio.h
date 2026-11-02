@@ -9,15 +9,20 @@
 #define DIO_PATH_LEN 1024
 #define DIO_PATH_SLOTS 4096
 #define DIO_MAX_PENDING 16384
+#define DIO_EVENT_MAX 24
 
 enum dio_event_id {
     DIO_PATH = 1,
     DIO_OPENAT = 7,
     DIO_READ = 8,
     DIO_PREAD64 = 9,
+    DIO_READV = 10,
     DIO_WRITE = 11,
     DIO_PWRITE64 = 12,
+    DIO_WRITEV = 13,
     DIO_CLOSE = 14,
+    DIO_FSYNC = 22,
+    DIO_FDATASYNC = 23,
 };
 
 enum dio_record_flags {
@@ -25,6 +30,23 @@ enum dio_record_flags {
     DIO_F_FILE_TYPE = 1U << 1,
     DIO_F_OFFSET = 1U << 2,
     DIO_F_PATH_REF = 1U << 3,
+    DIO_F_COUNT = 1U << 4,
+};
+
+struct dio_kernel_stats {
+    __u64 entered;
+    __u64 pending_failed;
+    __u64 pending_replaced;
+    __u64 matched;
+    __u64 filtered;
+    __u64 emitted;
+    __u64 ring_lost;
+    __u64 abandoned;
+    __u64 exit_without_entry;
+    __u64 pending_delete_failed;
+    __u64 path_attempted;
+    __u64 path_prepare_failed;
+    __u64 args_unavailable;
 };
 
 // structs usadas dos dois lados

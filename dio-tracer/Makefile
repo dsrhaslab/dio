@@ -9,7 +9,7 @@ vmlinux.h:
 
 build/dio.bpf.o: dio.bpf.c dio.h vmlinux.h
 	mkdir -p build
-	clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -Wall -Werror -Wno-missing-declarations -I. -c dio.bpf.c -o build/dio.bpf.o
+	clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -Wall -Werror -Wno-missing-declarations -I. -I/usr/include/x86_64-linux-gnu -c dio.bpf.c -o build/dio.bpf.o
 
 build/dio.skel.h: build/dio.bpf.o
 	bpftool gen skeleton build/dio.bpf.o > build/dio.skel.h.tmp

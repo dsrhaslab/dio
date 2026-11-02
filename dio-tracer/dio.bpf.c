@@ -1,4 +1,5 @@
 #include "vmlinux.h"
+#include <asm/unistd_64.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -11,6 +12,7 @@ const volatile bool filter_pids;
 const volatile bool filter_tids;
 const volatile bool skip_errors;
 const volatile bool skip_dirs;
+const volatile bool collect_stats;
 volatile __u32 accepting;
 
 struct fd_snapshot {
@@ -42,6 +44,13 @@ struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 8 * 1024 * 1024);
 } events SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, DIO_EVENT_MAX);
+    __type(key, __u32);
+    __type(value, struct dio_kernel_stats);
+} counters SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -99,6 +108,41 @@ struct {
     __type(value, __u32);
 } path_sequence SEC(".maps");
 
+static __always_inline struct dio_kernel_stats *event_stats(__u32 event_id)
+{
+    if (!collect_stats) {
+        return 0;
+    }
+    return bpf_map_lookup_elem(&counters, &event_id);
+}
+
+static __always_inline void save_pending(void *map, struct dio_key *key, void *args)
+{
+    struct dio_kernel_stats *stats = event_stats(key->event_id);
+    bool replaced = false;
+
+    if (stats) {
+        replaced = bpf_map_lookup_elem(map, key) != 0;
+    }
+    if (bpf_map_update_elem(map, key, args, BPF_ANY)) {
+        if (stats) {
+            __sync_fetch_and_add(&stats->pending_failed, 1);
+        }
+    } else if (stats && replaced) {
+        __sync_fetch_and_add(&stats->pending_replaced, 1);
+    }
+}
+
+static __always_inline void abandon_pending(void *map, struct dio_key *key)
+{
+    if (bpf_map_delete_elem(map, key) == 0) {
+        struct dio_kernel_stats *stats = event_stats(key->event_id);
+        if (stats) {
+            __sync_fetch_and_add(&stats->abandoned, 1);
+        }
+    }
+}
+
 static __always_inline int selected_task(void)
 {
     __u64 pid_tid = bpf_get_current_pid_tgid();
@@ -138,7 +182,18 @@ static __always_inline void fill_base(struct dio_base *base, __u64 call_ns, __u6
 
 static __always_inline int emit(void *record, __u32 size)
 {
-    return bpf_ringbuf_output(&events, record, size, 0) == 0;
+    struct dio_header *header = record;
+    struct dio_kernel_stats *stats = event_stats(header->event_id);
+    int result = bpf_ringbuf_output(&events, record, size, 0);
+
+    if (stats) {
+        if (result == 0) {
+            __sync_fetch_and_add(&stats->emitted, 1);
+        } else {
+            __sync_fetch_and_add(&stats->ring_lost, 1);
+        }
+    }
+    return result == 0;
 }
 
 static __always_inline struct file *file_from_fd(__s32 fd)
@@ -285,12 +340,16 @@ static __noinline int submit_path(struct file *file, struct dio_identity *identi
 {
     struct dio_path_event event = {};
     struct dio_file_info *info;
+    struct dio_kernel_stats *stats = event_stats(DIO_PATH);
     __u32 zero = 0;
     __u32 *sequence = bpf_map_lookup_elem(&path_sequence, &zero);
     __u32 generation;
 
+    if (stats) {
+        __sync_fetch_and_add(&stats->path_attempted, 1);
+    }
     if (!sequence) {
-        return 0;
+        goto failed;
     }
 
     generation = __sync_add_and_fetch(sequence, 1);
@@ -301,14 +360,14 @@ static __noinline int submit_path(struct file *file, struct dio_identity *identi
     event.index = generation % DIO_PATH_SLOTS;
     info = bpf_map_lookup_elem(&percpu_array_files, &event.index);
     if (!info) {
-        return 0;
+        goto failed;
     }
 
     // enquanto esta a preencher fica a zero
     info->generation = 0;
     info->file_type = file_type;
     if (read_file_path(file, info)) {
-        return 0;
+        goto failed;
     }
 
     // primeiro o path, so depois a geracao
@@ -321,6 +380,13 @@ static __noinline int submit_path(struct file *file, struct dio_identity *identi
     event.cpu = bpf_get_smp_processor_id();
     init_header(&event.header, DIO_PATH, DIO_F_IDENTITY | DIO_F_FILE_TYPE | DIO_F_PATH_REF);
     return emit(&event, sizeof(event));
+
+failed:
+    stats = event_stats(DIO_PATH);
+    if (stats) {
+        __sync_fetch_and_add(&stats->path_prepare_failed, 1);
+    }
+    return 0;
 }
 
 static __noinline void snapshot_fd(struct fd_snapshot *snapshot, __u64 call_ns)
@@ -387,7 +453,8 @@ static __noinline void snapshot_fd(struct fd_snapshot *snapshot, __u64 call_ns)
     }
 }
 
-SEC("tracepoint/syscalls/sys_enter_openat")
+// openat/write/pwrite64 usam raw por causa da regressao das entradas no kernel 7.0.0-38
+SEC("tracepoint/raw_syscalls/sys_enter")
 int enter_openat(struct trace_event_raw_sys_enter *ctx)
 {
     struct dio_key key = {
@@ -395,16 +462,21 @@ int enter_openat(struct trace_event_raw_sys_enter *ctx)
         .tid = (__u32)bpf_get_current_pid_tgid()
     };
     struct open_args args = {};
+    struct dio_kernel_stats *stats;
 
-    if (!accepting || !selected_task()) {
+    if (ctx->id != __NR_openat || !accepting || !selected_task()) {
         return 0;
     }
 
+    stats = event_stats(DIO_OPENAT);
+    if (stats) {
+        __sync_fetch_and_add(&stats->entered, 1);
+    }
     args.call_ns = bpf_ktime_get_ns();
     args.flags = ctx->args[2];
     args.mode = ctx->args[3];
 
-    bpf_map_update_elem(&entry_syscall_args, &key, &args, BPF_ANY);
+    save_pending(&entry_syscall_args, &key, &args);
 
     return 0;
 }
@@ -422,14 +494,27 @@ int exit_openat(struct trace_event_raw_sys_exit *ctx)
     struct open_args args;
     struct fd_snapshot snapshot = {};
     struct dio_open_event event = {};
+    struct dio_kernel_stats *stats;
 
     if (!pending) {
+        if (accepting && selected_task()) {
+            stats = event_stats(DIO_OPENAT);
+            if (stats) {
+                __sync_fetch_and_add(&stats->exit_without_entry, 1);
+            }
+        }
         return 0;
     }
 
+    stats = event_stats(DIO_OPENAT);
+    if (stats) {
+        __sync_fetch_and_add(&stats->matched, 1);
+    }
     // copia antes de apagar
     args = *pending;
-    bpf_map_delete_elem(&entry_syscall_args, &key);
+    if (bpf_map_delete_elem(&entry_syscall_args, &key) && stats) {
+        __sync_fetch_and_add(&stats->pending_delete_failed, 1);
+    }
 
     snapshot.file.fd = -1;
     if (retval >= 0) {
@@ -438,6 +523,9 @@ int exit_openat(struct trace_event_raw_sys_exit *ctx)
     }
 
     if (snapshot.discarded || (skip_errors && retval < 0)) {
+        if (stats) {
+            __sync_fetch_and_add(&stats->filtered, 1);
+        }
         return 0;
     }
 
@@ -451,6 +539,32 @@ int exit_openat(struct trace_event_raw_sys_exit *ctx)
     return 0;
 }
 
+// so le os descritores, nao copia o conteudo dos buffers
+static __noinline int iov_requested(const struct iovec *vec, __u64 count, __u64 *total)
+{
+    __u64 sum = 0;
+
+    if (count > 1024) {
+        return -1;
+    }
+    for (__u32 i = 0; i < 1024; i++) {
+        struct iovec iov = {};
+
+        if (i >= count) {
+            break;
+        }
+        if (bpf_probe_read_user(&iov, sizeof(iov), &vec[i])) {
+            return -1;
+        }
+        if (iov.iov_len > 0x7fffffffffffffffULL - sum) {
+            return -1;
+        }
+        sum += iov.iov_len;
+    }
+    *total = sum;
+    return 0;
+}
+
 static __always_inline int enter_data(struct trace_event_raw_sys_enter *ctx, __u32 event_id, bool explicit_offset)
 {
     struct dio_key key = {
@@ -458,14 +572,28 @@ static __always_inline int enter_data(struct trace_event_raw_sys_enter *ctx, __u
         .tid = (__u32)bpf_get_current_pid_tgid()
     };
     struct data_args args = {};
+    struct dio_kernel_stats *stats;
 
     if (!accepting || !selected_task()) {
         return 0;
     }
 
+    stats = event_stats(event_id);
+    if (stats) {
+        __sync_fetch_and_add(&stats->entered, 1);
+    }
     args.call_ns = bpf_ktime_get_ns();
     args.snapshot.file.fd = ctx->args[0];
-    args.bytes_requested = ctx->args[2];
+    if (event_id == DIO_READV || event_id == DIO_WRITEV) {
+        if (iov_requested((const struct iovec *)ctx->args[1], ctx->args[2], &args.bytes_requested) == 0) {
+            args.snapshot.flags |= DIO_F_COUNT;
+        } else if (stats) {
+            __sync_fetch_and_add(&stats->args_unavailable, 1);
+        }
+    } else {
+        args.bytes_requested = ctx->args[2];
+        args.snapshot.flags |= DIO_F_COUNT;
+    }
 
     snapshot_fd(&args.snapshot, args.call_ns);
     if (explicit_offset) {
@@ -474,7 +602,7 @@ static __always_inline int enter_data(struct trace_event_raw_sys_enter *ctx, __u
         args.snapshot.flags |= DIO_F_OFFSET;
     }
 
-    bpf_map_update_elem(&entry_data_buf_args, &key, &args, BPF_ANY);
+    save_pending(&entry_data_buf_args, &key, &args);
     return 0;
 }
 
@@ -489,16 +617,32 @@ static __always_inline int exit_data(struct trace_event_raw_sys_exit *ctx, __u32
     struct data_args *pending = bpf_map_lookup_elem(&entry_data_buf_args, &key);
     struct data_args args;
     struct dio_data_event event = {};
+    struct dio_kernel_stats *stats;
 
     if (!pending) {
+        if (accepting && selected_task()) {
+            stats = event_stats(event_id);
+            if (stats) {
+                __sync_fetch_and_add(&stats->exit_without_entry, 1);
+            }
+        }
         return 0;
     }
 
+    stats = event_stats(event_id);
+    if (stats) {
+        __sync_fetch_and_add(&stats->matched, 1);
+    }
     // copia antes de apagar
     args = *pending;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
+    if (bpf_map_delete_elem(&entry_data_buf_args, &key) && stats) {
+        __sync_fetch_and_add(&stats->pending_delete_failed, 1);
+    }
 
     if (args.snapshot.discarded || (skip_errors && retval < 0)) {
+        if (stats) {
+            __sync_fetch_and_add(&stats->filtered, 1);
+        }
         return 0;
     }
 
@@ -525,9 +669,24 @@ int exit_read(struct trace_event_raw_sys_exit *ctx)
     return exit_data(ctx, DIO_READ);
 }
 
-SEC("tracepoint/syscalls/sys_enter_write")
+SEC("tracepoint/syscalls/sys_enter_readv")
+int enter_readv(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_data(ctx, DIO_READV, false);
+}
+
+SEC("tracepoint/syscalls/sys_exit_readv")
+int exit_readv(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_data(ctx, DIO_READV);
+}
+
+SEC("tracepoint/raw_syscalls/sys_enter")
 int enter_write(struct trace_event_raw_sys_enter *ctx)
 {
+    if (ctx->id != __NR_write) {
+        return 0;
+    }
     return enter_data(ctx, DIO_WRITE, false);
 }
 
@@ -535,6 +694,18 @@ SEC("tracepoint/syscalls/sys_exit_write")
 int exit_write(struct trace_event_raw_sys_exit *ctx)
 {
     return exit_data(ctx, DIO_WRITE);
+}
+
+SEC("tracepoint/syscalls/sys_enter_writev")
+int enter_writev(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_data(ctx, DIO_WRITEV, false);
+}
+
+SEC("tracepoint/syscalls/sys_exit_writev")
+int exit_writev(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_data(ctx, DIO_WRITEV);
 }
 
 SEC("tracepoint/syscalls/sys_enter_pread64")
@@ -549,9 +720,12 @@ int exit_pread64(struct trace_event_raw_sys_exit *ctx)
     return exit_data(ctx, DIO_PREAD64);
 }
 
-SEC("tracepoint/syscalls/sys_enter_pwrite64")
+SEC("tracepoint/raw_syscalls/sys_enter")
 int enter_pwrite64(struct trace_event_raw_sys_enter *ctx)
 {
+    if (ctx->id != __NR_pwrite64) {
+        return 0;
+    }
     return enter_data(ctx, DIO_PWRITE64, true);
 }
 
@@ -561,60 +735,115 @@ int exit_pwrite64(struct trace_event_raw_sys_exit *ctx)
     return exit_data(ctx, DIO_PWRITE64);
 }
 
-SEC("tracepoint/syscalls/sys_enter_close")
-int enter_close(struct trace_event_raw_sys_enter *ctx)
+static __always_inline int enter_fd(struct trace_event_raw_sys_enter *ctx, __u32 event_id)
 {
     struct dio_key key = {
-        .event_id = DIO_CLOSE,
+        .event_id = event_id,
         .tid = (__u32)bpf_get_current_pid_tgid()
     };
     struct close_args args = {};
+    struct dio_kernel_stats *stats;
 
     if (!accepting || !selected_task()) {
         return 0;
     }
 
+    stats = event_stats(event_id);
+    if (stats) {
+        __sync_fetch_and_add(&stats->entered, 1);
+    }
     args.call_ns = bpf_ktime_get_ns();
     args.snapshot.file.fd = ctx->args[0];
 
     snapshot_fd(&args.snapshot, args.call_ns);
 
-    bpf_map_update_elem(&close_file_tag, &key, &args, BPF_ANY);
+    save_pending(&close_file_tag, &key, &args);
 
     return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_close")
-int exit_close(struct trace_event_raw_sys_exit *ctx)
+static __always_inline int exit_fd(struct trace_event_raw_sys_exit *ctx, __u32 event_id)
 {
     __u64 return_ns = bpf_ktime_get_ns();
     const volatile __s64 retval = ctx->ret;
     struct dio_key key = {
-        .event_id = DIO_CLOSE,
+        .event_id = event_id,
         .tid = (__u32)bpf_get_current_pid_tgid()
     };
     struct close_args *pending = bpf_map_lookup_elem(&close_file_tag, &key);
     struct close_args args;
     struct dio_close_event event = {};
+    struct dio_kernel_stats *stats;
 
     if (!pending) {
+        if (accepting && selected_task()) {
+            stats = event_stats(event_id);
+            if (stats) {
+                __sync_fetch_and_add(&stats->exit_without_entry, 1);
+            }
+        }
         return 0;
     }
 
+    stats = event_stats(event_id);
+    if (stats) {
+        __sync_fetch_and_add(&stats->matched, 1);
+    }
     // copia antes de apagar
     args = *pending;
-    bpf_map_delete_elem(&close_file_tag, &key);
+    if (bpf_map_delete_elem(&close_file_tag, &key) && stats) {
+        __sync_fetch_and_add(&stats->pending_delete_failed, 1);
+    }
 
     if (args.snapshot.discarded || (skip_errors && retval < 0)) {
+        if (stats) {
+            __sync_fetch_and_add(&stats->filtered, 1);
+        }
         return 0;
     }
 
-    init_header(&event.header, DIO_CLOSE, args.snapshot.flags & DIO_F_IDENTITY);
+    init_header(&event.header, event_id, args.snapshot.flags & DIO_F_IDENTITY);
     fill_base(&event.base, args.call_ns, return_ns, retval);
     event.file = args.snapshot.file;
 
     emit(&event, sizeof(event));
     return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_close")
+int enter_close(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_fd(ctx, DIO_CLOSE);
+}
+
+SEC("tracepoint/syscalls/sys_exit_close")
+int exit_close(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_fd(ctx, DIO_CLOSE);
+}
+
+SEC("tracepoint/syscalls/sys_enter_fsync")
+int enter_fsync(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_fd(ctx, DIO_FSYNC);
+}
+
+SEC("tracepoint/syscalls/sys_exit_fsync")
+int exit_fsync(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_fd(ctx, DIO_FSYNC);
+}
+
+SEC("tracepoint/syscalls/sys_enter_fdatasync")
+int enter_fdatasync(struct trace_event_raw_sys_enter *ctx)
+{
+    return enter_fd(ctx, DIO_FDATASYNC);
+}
+
+SEC("tracepoint/syscalls/sys_exit_fdatasync")
+int exit_fdatasync(struct trace_event_raw_sys_exit *ctx)
+{
+    return exit_fd(ctx, DIO_FDATASYNC);
 }
 
 SEC("tracepoint/sched/sched_process_exit")
@@ -623,22 +852,34 @@ int thread_exit(void *ctx)
     struct dio_key key = { .tid = (__u32)bpf_get_current_pid_tgid() };
 
     key.event_id = DIO_OPENAT;
-    bpf_map_delete_elem(&entry_syscall_args, &key);
+    abandon_pending(&entry_syscall_args, &key);
 
     key.event_id = DIO_READ;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
+    abandon_pending(&entry_data_buf_args, &key);
 
     key.event_id = DIO_PREAD64;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
+    abandon_pending(&entry_data_buf_args, &key);
+
+    key.event_id = DIO_READV;
+    abandon_pending(&entry_data_buf_args, &key);
 
     key.event_id = DIO_WRITE;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
+    abandon_pending(&entry_data_buf_args, &key);
 
     key.event_id = DIO_PWRITE64;
-    bpf_map_delete_elem(&entry_data_buf_args, &key);
+    abandon_pending(&entry_data_buf_args, &key);
+
+    key.event_id = DIO_WRITEV;
+    abandon_pending(&entry_data_buf_args, &key);
 
     key.event_id = DIO_CLOSE;
-    bpf_map_delete_elem(&close_file_tag, &key);
+    abandon_pending(&close_file_tag, &key);
+
+    key.event_id = DIO_FSYNC;
+    abandon_pending(&close_file_tag, &key);
+
+    key.event_id = DIO_FDATASYNC;
+    abandon_pending(&close_file_tag, &key);
     return 0;
 }
 

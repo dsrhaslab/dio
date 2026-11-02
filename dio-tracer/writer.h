@@ -7,12 +7,24 @@
 #include <stdint.h>
 #include <stdio.h>
 
+struct dio_user_stats {
+    uint64_t received;
+    uint64_t written;
+    uint64_t stale;
+    uint64_t rejected;
+    uint64_t failed;
+};
+
 struct dio_writer {
     FILE *output;
     int files_fd;
     int possible_cpus;
     struct dio_file_info *files;
     bool first;
+    bool show_stats;
+    bool output_failed;
+    struct dio_user_stats stats[DIO_EVENT_MAX];
+    uint64_t unknown_received;
     uint64_t epoch_offset_ns;
     char hostname[256];
     char session_name[128];

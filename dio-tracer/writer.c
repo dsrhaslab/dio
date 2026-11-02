@@ -162,6 +162,7 @@ static int write_document(struct dio_writer *writer, yyjson_mut_doc *doc)
     // a vírgula fica antes do próximo objeto, para não sobrar uma no fim
     if ((!writer->first && fputs(",\n", writer->output) == EOF) ||
         fwrite(json, 1, size, writer->output) != size || fflush(writer->output) != 0) {
+        writer->output_failed = true;
         result = -EIO;
     } else {
         writer->first = false;
@@ -171,7 +172,7 @@ static int write_document(struct dio_writer *writer, yyjson_mut_doc *doc)
 }
 
 static int add_context(struct dio_writer *writer, yyjson_mut_doc *doc, yyjson_mut_val *object,
-                       const char *name, const char *type, const struct dio_base *base,
+                       const char *name, const char *category, const char *type, const struct dio_base *base,
                        const struct dio_fd *file, unsigned flags)
 {
     uint64_t called = base->call_ns + writer->epoch_offset_ns;
@@ -199,7 +200,7 @@ static int add_context(struct dio_writer *writer, yyjson_mut_doc *doc, yyjson_mu
         !yyjson_mut_obj_add_sint(doc, object, "return_value", base->retval < 0 ? -1 : base->retval)) {
         return -ENOMEM;
     }
-    if (!yyjson_mut_obj_add_str(doc, object, "category", "FileManagement") ||
+    if (!yyjson_mut_obj_add_str(doc, object, "category", category) ||
         !yyjson_mut_obj_add_str(doc, object, "event_type", "storage") ||
         !yyjson_mut_obj_add_strcpy(doc, object, "type", type)) {
         return -ENOMEM;
@@ -240,12 +241,12 @@ static int write_path(struct dio_writer *writer, const struct dio_path_event *ev
         return -EINVAL;
     }
     if (bpf_map_lookup_elem(writer->files_fd, &event->index, writer->files) != 0) {
-        return -errno;
+        return -EIO;
     }
     struct dio_file_info *info = &writer->files[event->cpu];
     if (event->generation == 0 || info->generation != event->generation) {
         // este slot já mudou, o path que lá está pode ser de outro ficheiro
-        return 0;
+        return 1;
     }
     if (info->offset >= DIO_PATH_LEN || info->size == 0 || info->size > DIO_PATH_LEN - info->offset) {
         return -EINVAL;
@@ -262,8 +263,11 @@ static int write_path(struct dio_writer *writer, const struct dio_path_event *ev
     file_tag(tag, sizeof(tag), event->dev, event->ino, event->first_ns);
 
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
+    if (doc == NULL) {
+        return -ENOMEM;
+    }
     yyjson_mut_val *object = yyjson_mut_obj(doc);
-    if (doc == NULL || object == NULL) {
+    if (object == NULL) {
         yyjson_mut_doc_free(doc);
         return -ENOMEM;
     }
@@ -281,27 +285,21 @@ static int write_path(struct dio_writer *writer, const struct dio_path_event *ev
     return result;
 }
 
-int dio_writer_record(void *context, void *data, size_t size)
+static int write_record(struct dio_writer *writer, const struct dio_header *header, void *data)
 {
-    struct dio_writer *writer = context;
-    struct dio_header header;
-    if (data == NULL || size < sizeof(header)) {
-        return -EINVAL;
-    }
-    memcpy(&header, data, sizeof(header));
-    if (header.event_id == DIO_PATH) {
+    if (header->event_id == DIO_PATH) {
         struct dio_path_event event;
-        if (size != sizeof(event)) {
-            return -EINVAL;
-        }
         memcpy(&event, data, sizeof(event));
         return write_path(writer, &event);
     }
 
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
+    if (doc == NULL) {
+        return -ENOMEM;
+    }
     yyjson_mut_val *object = yyjson_mut_obj(doc);
     yyjson_mut_val *args = yyjson_mut_obj(doc);
-    if (doc == NULL || object == NULL || args == NULL) {
+    if (object == NULL || args == NULL) {
         yyjson_mut_doc_free(doc);
         return -ENOMEM;
     }
@@ -309,11 +307,11 @@ int dio_writer_record(void *context, void *data, size_t size)
     bool ok = false;
     int result = -EINVAL;
 
-    if (header.event_id == DIO_OPENAT && size == sizeof(struct dio_open_event)) {
+    if (header->event_id == DIO_OPENAT) {
         struct dio_open_event event;
         char flags[256], mode[16];
         memcpy(&event, data, sizeof(event));
-        result = add_context(writer, doc, object, "openat", "metadata", &event.base, &event.file, header.flags);
+        result = add_context(writer, doc, object, "openat", "FileManagement", "metadata", &event.base, &event.file, header->flags);
         ok = result == 0 &&
             open_flags(event.flags, flags, sizeof(flags)) &&
             yyjson_mut_obj_add_strcpy(doc, args, "flags", flags);
@@ -324,29 +322,41 @@ int dio_writer_record(void *context, void *data, size_t size)
             snprintf(mode, sizeof(mode), "%#3o", (unsigned)event.mode);
             ok = ok && yyjson_mut_obj_add_strcpy(doc, args, "mode", mode);
         }
-    } else if ((header.event_id == DIO_READ || header.event_id == DIO_WRITE ||
-                header.event_id == DIO_PREAD64 || header.event_id == DIO_PWRITE64) && size == sizeof(struct dio_data_event)) {
+    } else if (header->event_id == DIO_READ || header->event_id == DIO_WRITE ||
+               header->event_id == DIO_PREAD64 || header->event_id == DIO_PWRITE64 ||
+               header->event_id == DIO_READV || header->event_id == DIO_WRITEV) {
         struct dio_data_event event;
         memcpy(&event, data, sizeof(event));
         const char *name;
-        switch (header.event_id) {
+        switch (header->event_id) {
         case DIO_READ: name = "read"; break;
         case DIO_WRITE: name = "write"; break;
         case DIO_PREAD64: name = "pread64"; break;
-        default: name = "pwrite64"; break;
+        case DIO_PWRITE64: name = "pwrite64"; break;
+        case DIO_READV: name = "readv"; break;
+        default: name = "writev"; break;
         }
-        result = add_context(writer, doc, object, name, "data", &event.base, &event.file, header.flags);
-        ok = result == 0 &&
-            yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd) &&
-            yyjson_mut_obj_add_uint(doc, args, "bytes_requested", event.bytes_requested);
-        if ((header.flags & DIO_F_OFFSET) &&
-            (event.offset != -1 || header.event_id == DIO_PREAD64 || header.event_id == DIO_PWRITE64)) {
+        result = add_context(writer, doc, object, name, "FileManagement", "data", &event.base, &event.file, header->flags);
+        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd);
+        if (header->flags & DIO_F_COUNT) {
+            ok = ok && yyjson_mut_obj_add_uint(doc, args, "bytes_requested", event.bytes_requested);
+        }
+        if ((header->flags & DIO_F_OFFSET) &&
+            (event.offset != -1 || header->event_id == DIO_PREAD64 || header->event_id == DIO_PWRITE64)) {
             ok = ok && yyjson_mut_obj_add_sint(doc, args, "offset", event.offset);
         }
-    } else if (header.event_id == DIO_CLOSE && size == sizeof(struct dio_close_event)) {
+    } else if (header->event_id == DIO_CLOSE || header->event_id == DIO_FSYNC || header->event_id == DIO_FDATASYNC) {
         struct dio_close_event event;
         memcpy(&event, data, sizeof(event));
-        result = add_context(writer, doc, object, "close", "metadata", &event.base, &event.file, header.flags);
+        const char *name = "close";
+        const char *category = "FileManagement";
+        const char *type = "metadata";
+        if (header->event_id != DIO_CLOSE) {
+            name = header->event_id == DIO_FSYNC ? "fsync" : "fdatasync";
+            category = "DeviceManagement";
+            type = "data";
+        }
+        result = add_context(writer, doc, object, name, category, type, &event.base, &event.file, header->flags);
         ok = result == 0 &&
             yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd);
     }
@@ -362,14 +372,76 @@ int dio_writer_record(void *context, void *data, size_t size)
     return result;
 }
 
+int dio_writer_record(void *context, void *data, size_t size)
+{
+    struct dio_writer *writer = context;
+    struct dio_header header;
+    if (data == NULL || size < sizeof(header)) {
+        if (writer->show_stats) {
+            writer->unknown_received++;
+        }
+        return -EINVAL;
+    }
+    memcpy(&header, data, sizeof(header));
+
+    size_t expected;
+    switch (header.event_id) {
+    case DIO_PATH: expected = sizeof(struct dio_path_event); break;
+    case DIO_OPENAT: expected = sizeof(struct dio_open_event); break;
+    case DIO_READ:
+    case DIO_PREAD64:
+    case DIO_READV:
+    case DIO_WRITE:
+    case DIO_PWRITE64:
+    case DIO_WRITEV: expected = sizeof(struct dio_data_event); break;
+    case DIO_CLOSE:
+    case DIO_FSYNC:
+    case DIO_FDATASYNC: expected = sizeof(struct dio_close_event); break;
+    default:
+        if (writer->show_stats) {
+            writer->unknown_received++;
+        }
+        return -EINVAL;
+    }
+
+    struct dio_user_stats *stats = &writer->stats[header.event_id];
+    if (writer->show_stats) {
+        stats->received++;
+    }
+    if (size != expected) {
+        if (writer->show_stats) {
+            stats->rejected++;
+        }
+        return -EINVAL;
+    }
+
+    int result = writer->output_failed ? -EIO : write_record(writer, &header, data);
+    if (writer->show_stats) {
+        if (result == 0) {
+            stats->written++;
+        } else if (result == 1) {
+            stats->stale++;
+        } else if (result == -EINVAL) {
+            stats->rejected++;
+        } else {
+            stats->failed++;
+        }
+    }
+    // um path antigo é descartado, mas não precisa de parar a captura
+    return result == 1 ? 0 : result;
+}
+
 int dio_writer_close(struct dio_writer *writer)
 {
     int result = 0;
     if (writer->output != NULL) {
-        if (fputs("]\n", writer->output) == EOF || fflush(writer->output) != 0 || ferror(writer->output)) {
+        if (writer->output_failed || fputs("]\n", writer->output) == EOF ||
+            fflush(writer->output) != 0 || ferror(writer->output)) {
+            writer->output_failed = true;
             result = -1;
         }
         if (writer->output != stdout && fclose(writer->output) != 0) {
+            writer->output_failed = true;
             result = -1;
         }
         writer->output = NULL;
