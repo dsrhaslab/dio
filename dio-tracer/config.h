@@ -11,6 +11,8 @@ struct config {
     uint32_t tids[MAX_TARGETS];
     unsigned nr_pids;
     unsigned nr_tids;
+    bool open;
+    bool creat;
     bool openat;
     bool read;
     bool write;
@@ -21,6 +23,7 @@ struct config {
     bool writev;
     bool fsync;
     bool fdatasync;
+    bool lseek;
     bool show_stats;
     bool discard_errors;
     bool discard_directories;

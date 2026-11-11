@@ -10,14 +10,12 @@
 #include <string.h>
 #include <yaml.h>
 
-static int fail(const char *name, const char *message)
-{
+int fail(const char *name, const char *message) {
     fprintf(stderr, "Configuração: %s: %s\n", name, message);
     return -1;
 }
 
-static int number(const char *name, const char *text, unsigned long maximum, unsigned *result)
-{
+int number(const char *name, const char *text, unsigned long maximum, unsigned *result) {
     if (*text == '\0') {
         return fail(name, "falta um inteiro sem sinal");
     }
@@ -35,20 +33,20 @@ static int number(const char *name, const char *text, unsigned long maximum, uns
     return 0;
 }
 
-static int boolean(const char *name, const char *text, bool *result)
-{
+int boolean(const char *name, const char *text, bool *result) {
     if (strcmp(text, "true") == 0) {
         *result = true;
-    } else if (strcmp(text, "false") == 0) {
+    }
+    else if (strcmp(text, "false") == 0) {
         *result = false;
-    } else {
+    }
+    else {
         return fail(name, "usa true ou false");
     }
     return 0;
 }
 
-static int list(struct config *cfg, const char *name, const char *text)
-{
+int list(struct config *cfg, const char *name, const char *text) {
     bool events = strcmp(name, "tracer.events") == 0;
     bool tids = strcmp(name, "tracer.target_tids") == 0;
     uint32_t *ids = tids ? cfg->tids : cfg->pids;
@@ -60,9 +58,11 @@ static int list(struct config *cfg, const char *name, const char *text)
     }
     strcpy(buffer, text);
     if (events) {
+        cfg->open = cfg->creat = false;
         cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = false;
-        cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = false;
-    } else {
+        cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = cfg->lseek = false;
+    }
+    else {
         *count = 0;
         if (*text == '\0') {
             return 0;
@@ -87,32 +87,54 @@ static int list(struct config *cfg, const char *name, const char *text)
         }
         if (events) {
             if (strcmp(item, "all") == 0) {
+                cfg->open = cfg->creat = true;
                 cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = true;
-                cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = true;
-            } else if (strcmp(item, "openat") == 0) {
-                cfg->openat = true;
-            } else if (strcmp(item, "read") == 0) {
-                cfg->read = true;
-            } else if (strcmp(item, "write") == 0) {
-                cfg->write = true;
-            } else if (strcmp(item, "close") == 0) {
-                cfg->close = true;
-            } else if (strcmp(item, "pread64") == 0) {
-                cfg->pread64 = true;
-            } else if (strcmp(item, "pwrite64") == 0) {
-                cfg->pwrite64 = true;
-            } else if (strcmp(item, "readv") == 0) {
-                cfg->readv = true;
-            } else if (strcmp(item, "writev") == 0) {
-                cfg->writev = true;
-            } else if (strcmp(item, "fsync") == 0) {
-                cfg->fsync = true;
-            } else if (strcmp(item, "fdatasync") == 0) {
-                cfg->fdatasync = true;
-            } else {
-                return fail(name, "usa openat, read, write, close, pread64, pwrite64, readv, writev, fsync, fdatasync ou all; não deixes elementos vazios");
+                cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = cfg->lseek = true;
             }
-        } else {
+            else if (strcmp(item, "open") == 0) {
+                cfg->open = true;
+            }
+            else if (strcmp(item, "creat") == 0) {
+                cfg->creat = true;
+            }
+            else if (strcmp(item, "openat") == 0) {
+                cfg->openat = true;
+            }
+            else if (strcmp(item, "read") == 0) {
+                cfg->read = true;
+            }
+            else if (strcmp(item, "write") == 0) {
+                cfg->write = true;
+            }
+            else if (strcmp(item, "close") == 0) {
+                cfg->close = true;
+            }
+            else if (strcmp(item, "pread64") == 0) {
+                cfg->pread64 = true;
+            }
+            else if (strcmp(item, "pwrite64") == 0) {
+                cfg->pwrite64 = true;
+            }
+            else if (strcmp(item, "readv") == 0) {
+                cfg->readv = true;
+            }
+            else if (strcmp(item, "writev") == 0) {
+                cfg->writev = true;
+            }
+            else if (strcmp(item, "fsync") == 0) {
+                cfg->fsync = true;
+            }
+            else if (strcmp(item, "fdatasync") == 0) {
+                cfg->fdatasync = true;
+            }
+            else if (strcmp(item, "lseek") == 0) {
+                cfg->lseek = true;
+            }
+            else {
+                return fail(name, "usa open, creat, openat, read, write, close, pread64, pwrite64, readv, writev, fsync, fdatasync, lseek ou all; não deixes elementos vazios");
+            }
+        }
+        else {
             unsigned id;
             if (number(name, item, INT_MAX, &id) != 0) {
                 return -1;
@@ -136,8 +158,7 @@ static int list(struct config *cfg, const char *name, const char *text)
     return 0;
 }
 
-static int apply(struct config *cfg, const char *name, const char *text)
-{
+int apply(struct config *cfg, const char *name, const char *text) {
     if (strcmp(name, "tracer.events") == 0 || strcmp(name, "tracer.target_pids") == 0 ||
         strcmp(name, "tracer.target_tids") == 0) {
         return list(cfg, name, text);
@@ -177,8 +198,7 @@ static int apply(struct config *cfg, const char *name, const char *text)
     return fail(name, "opção desconhecida");
 }
 
-static const char *scalar(yaml_node_t *node)
-{
+const char *scalar(yaml_node_t *node) {
     if (node == NULL || node->type != YAML_SCALAR_NODE ||
         strlen((char *)node->data.scalar.value) != node->data.scalar.length) {
         return NULL;
@@ -186,9 +206,8 @@ static const char *scalar(yaml_node_t *node)
     return (char *)node->data.scalar.value;
 }
 
-static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node,
-                     const char *name, unsigned depth)
-{
+int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node,
+                     const char *name, unsigned depth) {
     if (node == NULL || depth > 3) {
         return fail(name, "estrutura YAML inválida");
     }
@@ -252,8 +271,7 @@ static int read_node(struct config *cfg, yaml_document_t *doc, yaml_node_t *node
     return apply(cfg, name, text);
 }
 
-static int read_yaml(struct config *cfg, const char *filename)
-{
+int read_yaml(struct config *cfg, const char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         return fail(filename, strerror(errno));
@@ -268,13 +286,15 @@ static int read_yaml(struct config *cfg, const char *filename)
     int result = -1;
     if (!yaml_parser_load(&parser, &doc)) {
         fail(filename, parser.problem ? parser.problem : "YAML inválido");
-    } else {
+    }
+    else {
         result = read_node(cfg, &doc, yaml_document_get_root_node(&doc), "", 0);
         yaml_document_delete(&doc);
         if (result == 0) {
             if (!yaml_parser_load(&parser, &doc)) {
                 result = fail(filename, "YAML inválido depois do documento");
-            } else {
+            }
+            else {
                 if (yaml_document_get_root_node(&doc) != NULL) {
                     result = fail(filename, "usa apenas um documento YAML");
                 }
@@ -287,13 +307,12 @@ static int read_yaml(struct config *cfg, const char *filename)
     return result;
 }
 
-static void usage(const char *program)
-{
+void usage(const char *program) {
     printf("Uso: %s [--config FICHEIRO] [--pid PID[,PID...]] [--tid TID[,TID...]] [opções]\n", program);
     puts("  --config FICHEIRO              configuração YAML\n"
          "  --pid PID[,PID...]              PIDs a observar\n"
          "  --tid TID[,TID...]              TIDs têm prioridade sobre PIDs\n"
-         "  --events LISTA                 openat,read,write,close,pread64,pwrite64,readv,writev,fsync,fdatasync ou all (default: all)\n"
+         "  --events LISTA                 open,creat,openat,read,write,close,pread64,pwrite64,readv,writev,fsync,fdatasync,lseek ou all (default: all)\n"
          "  --duration SEGUNDOS            zero não impõe limite de duração\n"
          "  --discard-errors true|false    default: false\n"
          "  --discard-directories true|false  default: false\n"
@@ -304,9 +323,8 @@ static void usage(const char *program)
          "Precedência: defaults < YAML < CLI. Sem --output, usa stdout. Ctrl+C termina.");
 }
 
-int config_read(struct config *cfg, int argc, char **argv)
-{
-    static const struct option options[] = {
+int config_read(struct config *cfg, int argc, char **argv) {
+    const struct option options[] = {
         {"config", required_argument, NULL, 'c'},
         {"pid", required_argument, NULL, 'p'},
         {"tid", required_argument, NULL, 't'},
@@ -320,9 +338,11 @@ int config_read(struct config *cfg, int argc, char **argv)
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0}
     };
+
     memset(cfg, 0, sizeof(*cfg));
+    cfg->open = cfg->creat = true;
     cfg->openat = cfg->read = cfg->write = cfg->close = cfg->pread64 = cfg->pwrite64 = true;
-    cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = true;
+    cfg->readv = cfg->writev = cfg->fsync = cfg->fdatasync = cfg->lseek = true;
     const char *filename = NULL;
     int option;
     opterr = 0;
@@ -352,23 +372,25 @@ int config_read(struct config *cfg, int argc, char **argv)
     while ((option = getopt_long(argc, argv, "", options, NULL)) != -1) {
         const char *name = NULL;
         switch (option) {
-        case 'p': name = "tracer.target_pids"; break;
-        case 't': name = "tracer.target_tids"; break;
-        case 'e': name = "tracer.events"; break;
-        case 'd': name = "tracer.duration"; break;
-        case 'E': name = "tracer.discard_errors"; break;
-        case 'D': name = "tracer.discard_directories"; break;
-        case 'S': name = "tracer.show_stats"; break;
-        case 'o': name = "output.file_writer.filename"; break;
-        case 's': name = "tracer.session_name"; break;
-        default: break;
+            case 'p': name = "tracer.target_pids"; break;
+            case 't': name = "tracer.target_tids"; break;
+            case 'e': name = "tracer.events"; break;
+            case 'd': name = "tracer.duration"; break;
+            case 'E': name = "tracer.discard_errors"; break;
+            case 'D': name = "tracer.discard_directories"; break;
+            case 'S': name = "tracer.show_stats"; break;
+            case 'o': name = "output.file_writer.filename"; break;
+            case 's': name = "tracer.session_name"; break;
+            default: break;
         }
         if (name != NULL && apply(cfg, name, optarg) != 0) {
             return -1;
         }
     }
+
     if (cfg->nr_pids == 0 && cfg->nr_tids == 0) {
         return fail("alvos", "indica pelo menos um PID ou TID");
     }
+
     return 0;
 }

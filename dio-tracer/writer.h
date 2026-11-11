@@ -17,9 +17,9 @@ struct dio_user_stats {
 
 struct dio_writer {
     FILE *output;
-    int files_fd;
+    int paths_fd; // map path_slots
     int possible_cpus;
-    struct dio_file_info *files;
+    struct dio_path_slot *path_values; // uma copia do slot consultado por CPU possivel
     bool first;
     bool show_stats;
     bool output_failed;
@@ -30,7 +30,7 @@ struct dio_writer {
     char session_name[128];
 };
 
-int dio_writer_open(struct dio_writer *writer, const char *filename, int files_fd, int possible_cpus, const char *session_name);
+int dio_writer_open(struct dio_writer *writer, const char *filename, int paths_fd, int possible_cpus, const char *session_name);
 int dio_writer_record(void *context, void *data, size_t size);
 int dio_writer_close(struct dio_writer *writer);
 

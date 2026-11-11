@@ -1,3 +1,5 @@
 /dio-tracer/build/
 /dio-tracer/vmlinux.h
 /dio-tracer/vmlinux.h.tmp
+/.venv/
+__pycache__/

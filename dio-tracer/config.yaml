@@ -1,5 +1,5 @@
 tracer:
-  events: [openat, read, write, close, pread64, pwrite64, readv, writev, fsync, fdatasync]
+  events: [open, creat, openat, read, write, close, pread64, pwrite64, readv, writev, fsync, fdatasync, lseek]
   target_pids: []
   target_tids: []
   discard_errors: false

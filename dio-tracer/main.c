@@ -19,22 +19,19 @@
 
 static volatile sig_atomic_t stopping;
 
-static void stop(int signal_number)
-{
+void stop(int signal_number) {
     (void)signal_number;
     stopping = 1;
 }
 
-static int libbpf_log(enum libbpf_print_level level, const char *format, va_list args)
-{
+int libbpf_log(enum libbpf_print_level level, const char *format, va_list args) {
     if (level == LIBBPF_DEBUG) {
         return 0;
     }
     return vfprintf(stderr, format, args);
 }
 
-static bool targets_alive(const struct config *cfg)
-{
+bool targets_alive(const struct config *cfg) {
     const uint32_t *ids = cfg->pids;
     unsigned count = cfg->nr_pids;
     bool filter_tid = cfg->nr_tids > 0;
@@ -77,8 +74,7 @@ static bool targets_alive(const struct config *cfg)
     return false;
 }
 
-static int add_targets(int map_fd, const uint32_t *ids, unsigned count)
-{
+int add_targets(int map_fd, const uint32_t *ids, unsigned count) {
     unsigned char yes = 1;
     for (unsigned i = 0; i < count; i++) {
         if (bpf_map_update_elem(map_fd, &ids[i], &yes, BPF_ANY) != 0) {
@@ -88,8 +84,7 @@ static int add_targets(int map_fd, const uint32_t *ids, unsigned count)
     return 0;
 }
 
-static uint64_t monotonic_ns(void)
-{
+uint64_t monotonic_ns(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
         return 0;
@@ -97,8 +92,7 @@ static uint64_t monotonic_ns(void)
     return (uint64_t)now.tv_sec * 1000000000ULL + now.tv_nsec;
 }
 
-static int pending_counts(int map_fd, uint64_t pending[DIO_EVENT_MAX])
-{
+int pending_counts(int map_fd, uint64_t pending[DIO_EVENT_MAX]) {
     struct dio_key key;
     struct dio_key next;
     const struct dio_key *previous = NULL;
@@ -114,8 +108,7 @@ static int pending_counts(int map_fd, uint64_t pending[DIO_EVENT_MAX])
     return errno == ENOENT ? 0 : -1;
 }
 
-static void add_stats(struct dio_kernel_stats *total, const struct dio_kernel_stats *cpu)
-{
+void add_stats(struct dio_kernel_stats *total, const struct dio_kernel_stats *cpu) {
     total->entered += cpu->entered;
     total->pending_failed += cpu->pending_failed;
     total->pending_replaced += cpu->pending_replaced;
@@ -131,23 +124,24 @@ static void add_stats(struct dio_kernel_stats *total, const struct dio_kernel_st
     total->args_unavailable += cpu->args_unavailable;
 }
 
-static int print_stats(struct dio_bpf *skel, const struct dio_writer *writer, int cpus, bool drained)
-{
-    static const char *names[DIO_EVENT_MAX] = {
+int print_stats(struct dio_bpf *skel, const struct dio_writer *writer, int cpus, bool drained) {
+    const char *names[DIO_EVENT_MAX] = {
+        [DIO_CREAT] = "creat", [DIO_OPEN] = "open",
         [DIO_PATH] = "EventPath", [DIO_OPENAT] = "openat", [DIO_READ] = "read",
         [DIO_PREAD64] = "pread64", [DIO_READV] = "readv", [DIO_WRITE] = "write",
         [DIO_PWRITE64] = "pwrite64", [DIO_WRITEV] = "writev", [DIO_CLOSE] = "close",
-        [DIO_FSYNC] = "fsync", [DIO_FDATASYNC] = "fdatasync"
+        [DIO_FSYNC] = "fsync", [DIO_FDATASYNC] = "fdatasync", [DIO_LSEEK] = "lseek"
     };
     uint64_t pending[DIO_EVENT_MAX] = {0};
     if (pending_counts(bpf_map__fd(skel->maps.entry_syscall_args), pending) != 0 ||
         pending_counts(bpf_map__fd(skel->maps.entry_data_buf_args), pending) != 0 ||
-        pending_counts(bpf_map__fd(skel->maps.close_file_tag), pending) != 0) {
+        pending_counts(bpf_map__fd(skel->maps.entry_fd_args), pending) != 0 ||
+        pending_counts(bpf_map__fd(skel->maps.entry_seek_args), pending) != 0) {
         perror("ler chamadas pendentes");
         return -1;
     }
 
-    // o lookup devolve uma copia por CPU, cada uma alinhada a 8 bytes
+    // o lookup devolve uma copia por CPU; arredonda cada tamanho para multiplo de 8
     size_t stride = (sizeof(struct dio_kernel_stats) + 7) & ~(size_t)7;
     unsigned char *values = calloc((size_t)cpus, stride);
     if (values == NULL) {
@@ -178,7 +172,8 @@ static int print_stats(struct dio_bpf *skel, const struct dio_writer *writer, in
             balanced = balanced && total.path_attempted == total.path_prepare_failed + total.emitted + total.ring_lost;
             fprintf(stderr, " attempted=%" PRIu64 " prepare_failed=%" PRIu64,
                     (uint64_t)total.path_attempted, (uint64_t)total.path_prepare_failed);
-        } else {
+        }
+        else {
             uint64_t eligible = total.matched >= total.filtered ? total.matched - total.filtered : 0;
             balanced = balanced && total.entered == total.pending_failed + total.pending_replaced + total.matched + total.abandoned + pending[id];
             balanced = balanced && total.pending_delete_failed == 0 && total.matched >= total.filtered;
@@ -206,13 +201,13 @@ static int print_stats(struct dio_bpf *skel, const struct dio_writer *writer, in
     return all_balanced && drained ? 0 : -1;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     struct config cfg;
     int result = config_read(&cfg, argc, argv);
     if (result != 0) {
         return result < 0 ? 2 : 0;
     }
+
     if (!targets_alive(&cfg)) {
         fprintf(stderr, "Nenhum PID/TID indicado esta ativo\n");
         return 1;
@@ -226,6 +221,7 @@ int main(int argc, char **argv)
         return 1;
     }
     signal(SIGPIPE, SIG_IGN);
+
     libbpf_set_print(libbpf_log);
 
     struct dio_bpf *skel = NULL;
@@ -241,7 +237,7 @@ int main(int argc, char **argv)
     // escolhe os filtros e os programas antes de carregar
     skel = dio_bpf__open();
     if (skel == NULL) {
-        fprintf(stderr, "Nao consegui abrir o BPF\n");
+        fprintf(stderr, "Falha ao abrir o BPF\n");
         goto cleanup;
     }
     skel->rodata->filter_pids = cfg.nr_pids > 0;
@@ -255,6 +251,8 @@ int main(int argc, char **argv)
         struct bpf_program *exit;
         bool enabled;
     } syscalls[] = {
+        {skel->progs.enter_open, skel->progs.exit_open, cfg.open},
+        {skel->progs.enter_creat, skel->progs.exit_creat, cfg.creat},
         {skel->progs.enter_openat, skel->progs.exit_openat, cfg.openat},
         {skel->progs.enter_read, skel->progs.exit_read, cfg.read},
         {skel->progs.enter_write, skel->progs.exit_write, cfg.write},
@@ -264,19 +262,22 @@ int main(int argc, char **argv)
         {skel->progs.enter_readv, skel->progs.exit_readv, cfg.readv},
         {skel->progs.enter_writev, skel->progs.exit_writev, cfg.writev},
         {skel->progs.enter_fsync, skel->progs.exit_fsync, cfg.fsync},
-        {skel->progs.enter_fdatasync, skel->progs.exit_fdatasync, cfg.fdatasync}
+        {skel->progs.enter_fdatasync, skel->progs.exit_fdatasync, cfg.fdatasync},
+        {skel->progs.enter_lseek, skel->progs.exit_lseek, cfg.lseek}
     };
     for (unsigned i = 0; i < sizeof(syscalls) / sizeof(syscalls[0]); i++) {
         if (bpf_program__set_autoload(syscalls[i].enter, syscalls[i].enabled) != 0 ||
             bpf_program__set_autoload(syscalls[i].exit, syscalls[i].enabled) != 0) {
-            fprintf(stderr, "Nao consegui selecionar as syscalls\n");
+            fprintf(stderr, "Falha ao selecionar as syscalls\n");
             goto cleanup;
         }
     }
+
     if (dio_bpf__load(skel) != 0) {
-        fprintf(stderr, "Nao consegui carregar o BPF\n");
+        fprintf(stderr, "Falha ao carregar o BPF\n");
         goto cleanup;
     }
+
     if (add_targets(bpf_map__fd(skel->maps.trace_pids), cfg.pids, cfg.nr_pids) != 0 ||
         add_targets(bpf_map__fd(skel->maps.trace_tids), cfg.tids, cfg.nr_tids) != 0) {
         perror("filtros PID/TID");
@@ -285,11 +286,12 @@ int main(int argc, char **argv)
 
     cpus = libbpf_num_possible_cpus();
     if (cpus <= 0) {
-        fprintf(stderr, "Nao consegui ler o numero de CPUs\n");
+        fprintf(stderr, "Falha ao ler o numero de CPUs\n");
         goto cleanup;
     }
+
     const char *output = cfg.output[0] == '\0' ? NULL : cfg.output;
-    if (dio_writer_open(&writer, output, bpf_map__fd(skel->maps.percpu_array_files), cpus, cfg.session_name) != 0) {
+    if (dio_writer_open(&writer, output, bpf_map__fd(skel->maps.path_slots), cpus, cfg.session_name) != 0) {
         perror("abrir output");
         goto cleanup;
     }
@@ -302,8 +304,9 @@ int main(int argc, char **argv)
         perror("ring buffer");
         goto cleanup;
     }
+
     if (dio_bpf__attach(skel) != 0) {
-        fprintf(stderr, "Nao consegui ligar os hooks\n");
+        fprintf(stderr, "Falha ao ligar os hooks\n");
         goto cleanup;
     }
     attached = true;
@@ -325,6 +328,7 @@ int main(int argc, char **argv)
             rc = 1;
             break;
         }
+
         if (cfg.duration > 0) {
             uint64_t now = monotonic_ns();
             if (now == 0) {
@@ -344,21 +348,26 @@ cleanup:
         skel->bss->accepting = 0;
         dio_bpf__detach(skel);
     }
+
     if (ring != NULL) {
         if (writer.output_failed) {
             drained = false;
-        } else if (ring_buffer__consume(ring) < 0) {
+        }
+        else if (ring_buffer__consume(ring) < 0) {
             drained = false;
             rc = 1;
         }
     }
+
     if (writer_open && dio_writer_close(&writer) != 0) {
         perror("fechar output");
         rc = 1;
     }
+
     if (cfg.show_stats && capturing && print_stats(skel, &writer, cpus, drained) != 0) {
         rc = 1;
     }
+
     ring_buffer__free(ring);
     dio_bpf__destroy(skel);
     return rc;
