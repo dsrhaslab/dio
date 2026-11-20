@@ -1,7 +1,8 @@
 #define _GNU_SOURCE
 #include "writer.h"
+#include "decoder.h"
+#include "filepaths.h"
 
-#include <bpf/bpf.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -11,8 +12,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <yyjson.h>
-
-#define PATH_STALE 1
 
 uint64_t time_ns(struct timespec value) {
     // um segundo tem 1000000000 nanossegundos
@@ -119,11 +118,10 @@ bool open_flags(unsigned value, char *text, size_t size) {
     return true;
 }
 
-int dio_writer_open(struct dio_writer *writer, const char *filename, int paths_fd, int possible_cpus, const char *session_name) {
+int dio_writer_open(struct dio_writer *writer, const char *filename, const char *session_name) {
     memset(writer, 0, sizeof(*writer));
 
-    if (paths_fd < 0 || possible_cpus <= 0 || session_name == NULL ||
-        strlen(session_name) >= sizeof(writer->session_name)) {
+    if (session_name == NULL || strlen(session_name) >= sizeof(writer->session_name)) {
         errno = EINVAL;
         return -1;
     }
@@ -147,15 +145,7 @@ int dio_writer_open(struct dio_writer *writer, const char *filename, int paths_f
         snprintf(writer->session_name, sizeof(writer->session_name), "dio-%" PRIu64 "-%ld", time_ns(realtime), (long)getpid());
     }
 
-    writer->paths_fd = paths_fd;
-    writer->possible_cpus = possible_cpus;
     writer->first = true;
-
-    writer->path_values = calloc(possible_cpus, sizeof(struct dio_path_slot));
-    if (writer->path_values == NULL) {
-        return -1;
-    }
-
     writer->output = filename == NULL ? stdout : fopen(filename, "w");
     if (writer->output == NULL || fputc('[', writer->output) == EOF || fflush(writer->output) != 0) {
         int error = errno != 0 ? errno : EIO;
@@ -163,8 +153,6 @@ int dio_writer_open(struct dio_writer *writer, const char *filename, int paths_f
             fclose(writer->output);
         }
 
-        free(writer->path_values);
-        writer->path_values = NULL;
         writer->output = NULL;
         errno = error;
         return -1;
@@ -274,36 +262,9 @@ int add_context(struct dio_writer *writer, yyjson_mut_doc *doc, yyjson_mut_val *
     return 0;
 }
 
-int write_path(struct dio_writer *writer, const struct dio_path_event *event) {
-    if (event->cpu >= writer->possible_cpus || event->index >= DIO_PATH_SLOTS) {
-        return -EINVAL;
-    }
-
-    if (bpf_map_lookup_elem(writer->paths_fd, &event->index, writer->path_values) != 0) {
-        return -EIO;
-    }
-
-    struct dio_path_slot *slot = &writer->path_values[event->cpu];
-    if (event->generation == 0 || slot->generation != event->generation) {
-        // este slot já mudou, o path que lá está pode ser de outro ficheiro
-        return PATH_STALE;
-    }
-
-    if (slot->offset >= DIO_PATH_LEN || slot->size == 0 || slot->size > DIO_PATH_LEN - slot->offset) {
-        return -EINVAL;
-    }
-
-    // sobra espaco para acrescentar :[inode] aos pipes e sockets
-    char path[DIO_PATH_LEN + 32], tag[64];
-    size_t length = strnlen(slot->filename + slot->offset, slot->size);
-    memcpy(path, slot->filename + slot->offset, length);
-    path[length] = '\0';
-
-    if ((slot->file_type & S_IFMT) == S_IFSOCK ||
-        ((slot->file_type & S_IFMT) == S_IFIFO && strcmp(path, "pipe") == 0)) {
-        snprintf(path + length, sizeof(path) - length, ":[%u]", event->ino);
-    }
-
+static int write_path(struct dio_writer *writer, const struct dio_path_event *event,
+                      const struct dio_resolved_path *path) {
+    char tag[64];
     file_tag(tag, sizeof(tag), event->dev, event->ino, event->first_ns);
 
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
@@ -321,8 +282,8 @@ int write_path(struct dio_writer *writer, const struct dio_path_event *event) {
 
     bool ok = yyjson_mut_obj_add_str(doc, object, "doc_type", "EventPath") &&
         yyjson_mut_obj_add_strcpy(doc, object, "session_name", writer->session_name) &&
-        yyjson_mut_obj_add_strcpy(doc, object, "file_path", path) &&
-        yyjson_mut_obj_add_str(doc, object, "file_type", file_type(slot->file_type)) &&
+        yyjson_mut_obj_add_strcpy(doc, object, "file_path", path->text) &&
+        yyjson_mut_obj_add_str(doc, object, "file_type", file_type(path->file_type)) &&
         yyjson_mut_obj_add_strcpy(doc, object, "file_tag", tag);
 
     int result = -ENOMEM;
@@ -334,12 +295,11 @@ int write_path(struct dio_writer *writer, const struct dio_path_event *event) {
     return result;
 }
 
-int write_record(struct dio_writer *writer, const struct dio_header *header, void *data) {
+int dio_writer_write(struct dio_writer *writer, const union dio_record *record,
+                     const struct dio_resolved_path *path) {
+    const struct dio_header *header = &record->header;
     if (header->event_id == DIO_PATH) {
-        struct dio_path_event event;
-
-        memcpy(&event, data, sizeof(event));
-        return write_path(writer, &event);
+        return write_path(writer, &record->path, path);
     }
 
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
@@ -360,10 +320,8 @@ int write_record(struct dio_writer *writer, const struct dio_header *header, voi
     int result = -EINVAL;
 
     if (header->event_id == DIO_OPEN || header->event_id == DIO_CREAT || header->event_id == DIO_OPENAT) {
-        struct dio_open_event event;
+        const struct dio_open_event *event = &record->open;
         char flags[256], mode[16];
-
-        memcpy(&event, data, sizeof(event));
 
         const char *name;
         switch (header->event_id) {
@@ -372,29 +330,27 @@ int write_record(struct dio_writer *writer, const struct dio_header *header, voi
             default: name = "openat"; break;
         }
 
-        result = add_context(writer, doc, object, name, "FileManagement", "metadata", &event.base, &event.file, header->flags);
+        result = add_context(writer, doc, object, name, "FileManagement", "metadata", &event->base, &event->file, header->flags);
         ok = result == 0;
 
         if (header->event_id != DIO_CREAT) {
-            ok = ok && open_flags(event.flags, flags, sizeof(flags)) &&
+            ok = ok && open_flags(event->flags, flags, sizeof(flags)) &&
                 yyjson_mut_obj_add_strcpy(doc, args, "flags", flags);
         }
 
-        if (event.base.retval >= 0) {
-            ok = ok && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd);
+        if (event->base.retval >= 0) {
+            ok = ok && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event->file.fd);
         }
 
-        if (header->event_id == DIO_CREAT || (event.flags & O_CREAT) || (event.flags & O_TMPFILE) == O_TMPFILE) {
-            snprintf(mode, sizeof(mode), "%#3o", (unsigned)event.mode);
+        if (header->event_id == DIO_CREAT || (event->flags & O_CREAT) || (event->flags & O_TMPFILE) == O_TMPFILE) {
+            snprintf(mode, sizeof(mode), "%#3o", (unsigned)event->mode);
             ok = ok && yyjson_mut_obj_add_strcpy(doc, args, "mode", mode);
         }
     }
     else if (header->event_id == DIO_READ || header->event_id == DIO_WRITE ||
                header->event_id == DIO_PREAD64 || header->event_id == DIO_PWRITE64 ||
                header->event_id == DIO_READV || header->event_id == DIO_WRITEV) {
-        struct dio_data_event event;
-
-        memcpy(&event, data, sizeof(event));
+        const struct dio_data_event *event = &record->data;
 
         const char *name;
         switch (header->event_id) {
@@ -406,22 +362,20 @@ int write_record(struct dio_writer *writer, const struct dio_header *header, voi
             default: name = "writev"; break;
         }
 
-        result = add_context(writer, doc, object, name, "FileManagement", "data", &event.base, &event.file, header->flags);
-        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd);
+        result = add_context(writer, doc, object, name, "FileManagement", "data", &event->base, &event->file, header->flags);
+        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event->file.fd);
 
         if (header->flags & DIO_F_COUNT) {
-            ok = ok && yyjson_mut_obj_add_uint(doc, args, "bytes_requested", event.bytes_requested);
+            ok = ok && yyjson_mut_obj_add_uint(doc, args, "bytes_requested", event->bytes_requested);
         }
 
         if ((header->flags & DIO_F_OFFSET) &&
-            (event.offset != -1 || header->event_id == DIO_PREAD64 || header->event_id == DIO_PWRITE64)) {
-            ok = ok && yyjson_mut_obj_add_sint(doc, args, "offset", event.offset);
+            (event->offset != -1 || header->event_id == DIO_PREAD64 || header->event_id == DIO_PWRITE64)) {
+            ok = ok && yyjson_mut_obj_add_sint(doc, args, "offset", event->offset);
         }
     }
     else if (header->event_id == DIO_CLOSE || header->event_id == DIO_FSYNC || header->event_id == DIO_FDATASYNC) {
-        struct dio_fd_event event;
-
-        memcpy(&event, data, sizeof(event));
+        const struct dio_fd_event *event = &record->fd;
 
         const char *name = "close";
         const char *category = "FileManagement";
@@ -432,19 +386,17 @@ int write_record(struct dio_writer *writer, const struct dio_header *header, voi
             type = "data";
         }
 
-        result = add_context(writer, doc, object, name, category, type, &event.base, &event.file, header->flags);
-        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd);
+        result = add_context(writer, doc, object, name, category, type, &event->base, &event->file, header->flags);
+        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event->file.fd);
     }
     else if (header->event_id == DIO_LSEEK) {
-        struct dio_seek_event event;
+        const struct dio_seek_event *event = &record->seek;
         char whence[16];
 
-        memcpy(&event, data, sizeof(event));
-
-        result = add_context(writer, doc, object, "lseek", "FileManagement", "metadata", &event.base, &event.file, header->flags);
-        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event.file.fd) &&
-                            yyjson_mut_obj_add_sint(doc, args, "offset", event.offset) &&
-                            yyjson_mut_obj_add_strcpy(doc, args, "whence", seek_whence(event.whence, whence, sizeof(whence)));
+        result = add_context(writer, doc, object, "lseek", "FileManagement", "metadata", &event->base, &event->file, header->flags);
+        ok = result == 0 && yyjson_mut_obj_add_sint(doc, args, "file_descriptor", event->file.fd) &&
+                            yyjson_mut_obj_add_sint(doc, args, "offset", event->offset) &&
+                            yyjson_mut_obj_add_strcpy(doc, args, "whence", seek_whence(event->whence, whence, sizeof(whence)));
     }
 
     if (result == 0) {
@@ -458,78 +410,6 @@ int write_record(struct dio_writer *writer, const struct dio_header *header, voi
 
     yyjson_mut_doc_free(doc);
     return result;
-}
-
-int dio_writer_record(void *context, void *data, size_t size) {
-    struct dio_writer *writer = context;
-    struct dio_header header;
-
-    if (data == NULL || size < sizeof(header)) {
-        if (writer->show_stats) {
-            writer->unknown_received++;
-        }
-        return -EINVAL;
-    }
-
-    memcpy(&header, data, sizeof(header));
-
-    size_t expected;
-    switch (header.event_id) {
-        case DIO_PATH: expected = sizeof(struct dio_path_event); break;
-        case DIO_OPEN:
-        case DIO_CREAT:
-        case DIO_OPENAT: expected = sizeof(struct dio_open_event); break;
-
-        case DIO_READ:
-        case DIO_PREAD64:
-        case DIO_READV:
-        case DIO_WRITE:
-        case DIO_PWRITE64:
-        case DIO_WRITEV: expected = sizeof(struct dio_data_event); break;
-
-        case DIO_CLOSE:
-        case DIO_FSYNC:
-        case DIO_FDATASYNC: expected = sizeof(struct dio_fd_event); break;
-
-        case DIO_LSEEK: expected = sizeof(struct dio_seek_event); break;
-
-        default:
-            if (writer->show_stats) {
-                writer->unknown_received++;
-            }
-            return -EINVAL;
-    }
-
-    struct dio_user_stats *stats = &writer->stats[header.event_id];
-    if (writer->show_stats) {
-        stats->received++;
-    }
-
-    if (size != expected) {
-        if (writer->show_stats) {
-            stats->rejected++;
-        }
-        return -EINVAL;
-    }
-
-    int result = writer->output_failed ? -EIO : write_record(writer, &header, data);
-    if (writer->show_stats) {
-        if (result == 0) {
-            stats->written++;
-        }
-        else if (result == PATH_STALE) {
-            stats->stale++;
-        }
-        else if (result == -EINVAL) {
-            stats->rejected++;
-        }
-        else {
-            stats->failed++;
-        }
-    }
-
-    // um path antigo é descartado, mas não precisa de parar a captura
-    return result == PATH_STALE ? 0 : result;
 }
 
 int dio_writer_close(struct dio_writer *writer) {
@@ -550,7 +430,5 @@ int dio_writer_close(struct dio_writer *writer) {
         writer->output = NULL;
     }
 
-    free(writer->path_values);
-    writer->path_values = NULL;
     return result;
 }

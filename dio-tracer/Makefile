@@ -1,6 +1,9 @@
 .PHONY: all clean
 .DELETE_ON_ERROR:
 
+SOURCES = main.c config.c loader.c consumer.c decoder.c filepaths.c writer.c stats.c
+HEADERS = config.h loader.h consumer.h decoder.h filepaths.h writer.h stats.h dio.h
+
 all: build/dio
 
 vmlinux.h:
@@ -15,8 +18,8 @@ build/dio.skel.h: build/dio.bpf.o
 	bpftool gen skeleton build/dio.bpf.o > build/dio.skel.h.tmp
 	mv build/dio.skel.h.tmp build/dio.skel.h
 
-build/dio: main.c config.c writer.c config.h writer.h dio.h build/dio.skel.h
-	cc -O2 -g -std=c11 -Wall -Wextra -Werror -I. -Ibuild main.c config.c writer.c -o build/dio -lbpf -lyaml -lyyjson
+build/dio: $(SOURCES) $(HEADERS) build/dio.skel.h
+	cc -O2 -g -std=c11 -Wall -Wextra -Werror -I. -Ibuild $(SOURCES) -o build/dio -lbpf -lyaml -lyyjson
 
 clean:
 	rm -rf build
